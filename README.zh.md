@@ -25,7 +25,7 @@ DSH 的 `pwsh`/`bash` 工具不是流式的：前台命令的输出要等命令�
 ## 安装
 
 ```bash
-# 从 npm（发布后）
+# 从 npm —— 一条命令，装好并自动注册进 profile
 dsh plugin --profile web add dsh-task-progress
 
 # 从 git 仓库
@@ -36,6 +36,36 @@ dsh plugin --profile web add github:chen8923/dsh-task-progress
 ```
 
 DSH 在启动时挂载 profile bundle，所以之后**需要重启 DSH**。本插件依赖 Web profile（`webServer`、`connection`、`shellEnv` 与右侧栏）；缺少这些的组合里它会保持未加载，不产生任何影响。
+
+仓库名和 npm 包名**完全一致**，所以 `dsh plugin add dsh-task-progress` 不会装成别人的包——这里不存在"发现用仓库名、安装用包名"的错位。
+
+## 兼容性
+
+| | |
+| --- | --- |
+| **DSH** | 构建并实测于 `@deepseek-ai/dsh` 0.1.5-rc.2（commit `0e77055`），Web profile。 |
+| **Node** | 插件本体要求 Node 20+（见 `engines`）；测试套件要求 Node 22.18+（它靠类型擦除直接跑 TypeScript 源码）。 |
+| **用到的 DSH 接缝** | `webServer`、`connection`、`shellEnv`、`settings`、`systemPrompt`、`slots`、`sidebarRightTabs`、`locale`、`settingsScope`。**每一个都是可选的**：组合里缺哪个，就少哪一块界面，其余照常。 |
+| **依赖** | 运行时零依赖。宿主半只 import Node 内置模块；浏览器半把自己的一切都打包进来，只把 `react` 当平台外部依赖。 |
+| **冲突** | 不占用任何别人拥有的路径：往 `shell.overlay`、右侧栏、设置区各**增加**自己的一个条目（与官方插件同样的追加式注册），外加自己的路由、设置命名空间和提示词段，一律以 `task-progress` 命名。 |
+
+## 触碰范围
+
+装 DSH 插件**不是**沙箱内的行为——插件运行在 DSH 进程里，拥有该进程的权限。所以这里是完整的实际动作清单，让你**装之前**就知道，而不是装完再去读源码。这份表与 [`SECURITY.md`](SECURITY.md) 的承诺一致；**表与代码不符，本身就按安全问题处理**。
+
+| 面 | 实际发生的事 |
+| --- | --- |
+| **读取** | `<root>/.dsh-progress/<会话 id>/<任务>.jsonl`，且只读文件尾部（默认每个文件 256 KiB）。`<root>` 是被 shell 调用交到它手上的 workspace 目录，加上你自己配置的绝对路径根。其它文件一概不打开。 |
+| **创建** | `<workspace>/.dsh-progress/<会话 id>/`（该会话第一次 shell 调用时）。设置页的保存经 DSH 自己的设置服务写入该命名空间的用户层。 |
+| **Shell 环境** | 每次 shell 调用会多出 `DSH_PROGRESS_DIR` 与 `DSH_PROGRESS_CLI` 两个变量。 |
+| **联网** | 没有。不发任何外部请求，无遥测、无更新检查、不启动子进程。 |
+| **HTTP** | 只有一个路由 `GET`/`HEAD /plugins/task-progress/state`，**先**过 DSH 自己的 `connection.requestRejection` 再读任何东西；一次只回答一个会话，响应里不含任何文件系统路径。 |
+| **模型上下文** | 只加一段**静态**系统提示词（紧挨着 DSH 的后台任务说明）。 |
+| **工具** | **一个都不加。** 工具目录原封不动——所以和多数插件不同，装它不会往缓存前缀里塞新的工具说明书，运行期也不会改动提示词。它的缓存代价是**一次性的短短一段**。 |
+| **界面** | 悬浮层、右侧栏 tab、设置卡片各一个，都是往共享列表槽里追加自己的键。 |
+| **内存** | 受配置约束：一次文档最多 `maxTasks` 个任务、每任务 `messagesPerTask` 条消息、每文件 `fileTailBytes` 字节，已知进度目录最多 64 个（LRU）。 |
+
+漏洞请走[私密上报](SECURITY.md)，不要先开公开 issue。
 
 ## 用法
 
@@ -136,11 +166,12 @@ pwsh ./examples/simulate.ps1 -Task demo -Steps 30 -DelayMs 500
 - **不做取消按钮。** 停任务是模型的 `job_kill`（人类主动中断涉及一个本插件无权决定的投递语义问题）。
 - **不做远程生产者。** 一切都在会话本来就能写的本地 workspace 文件里。
 - **不做会话查询。** 目录来自"被交到手上的那些 shell 调用"加配置的根目录——所以它不会复活会话，也不会去读浏览器给的路径。
+- **不做跨会话读取。** 状态端点一次只回答一个会话，且响应里不放任何文件系统路径。DSH 的 Web 登录是**整个实例**级别的围栏、不是会话级的，所以一个"把进程知道的全部吐出来"的端点，等于把其它所有会话的任务名和消息交给任意已登录调用者。
 
 ## 开发
 
 ```bash
-npm test              # 38 个测试，单进程（受限沙箱里也能跑）
+npm test              # 88 个测试，单进程（受限沙箱里也能跑）
 npm run test:runner   # 同一套测试走 node --test
 npm run build         # 需要 tsdown
 ```
@@ -153,9 +184,27 @@ src/host/              设置命名空间、store、环境变量贡献者、HTTP
 src/client/            轮询 store、格式化、设置表单、React 组件、slot、样式
 bin/dsh-progress.mjs   零依赖的生产者 CLI
 docs/PROTOCOL.md       文件协议与全部配置项
-test/                  协议、store、格式化、宿主接线、设置五套测试
+test/                  十二套测试：协议、store、格式化、宿主接线、设置、
+                       设置表单、提示词段、会话钩子、客户端 store、CLI、构建产物、发版一致性
 tools/                 测试入口与构建/打包/安装脚本
 ```
+
+### 发布
+
+```bash
+npm test                                              # 88 项检查，单进程
+git push && git tag v0.1.1 && git push origin v0.1.1   # 由 CI 发布，并带 provenance
+npm publish                                           # 手工兜底：先构建再发布
+```
+
+`test/release.test.ts` 会在这些情况失败：`package.json` 的版本没有同时出现在两个 README 与
+CHANGELOG 里；文档里让用户跑的某个示例没被打进 `files`；或者仓库链接与安装说明指向不同项目
+——所以"版本/链接出现的四个地方"不可能各自漂移。
+
+打 tag 后由 `.github/workflows/publish.yml` 发布（需先在 npm 上配置 trusted publisher：
+仓库 `chen8923/dsh-task-progress`、workflow `publish.yml`）。这条路径**不存任何 token**，
+并会给 tarball 附上签名 provenance，把它钉到具体 commit。手工 `npm publish` 在 npm 允许
+2FA-bypass token 直接发布之前仍然可用——官方计划 2027 年 1 月取消——但它永远无法带 provenance。
 
 ## 许可证
 

@@ -45,6 +45,7 @@
     "docs",
     "examples",
     "CHANGELOG.md",
+    "SECURITY.md",
     "README.md",
     "README.zh.md",
     "LICENSE"

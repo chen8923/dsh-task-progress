@@ -7,6 +7,33 @@ All notable changes to this plugin are recorded here. The format follows
 The version here, in `package.json`, and in both READMEs is checked by
 `test/release.test.ts`, so they cannot drift apart.
 
+## [Unreleased]
+
+### Added
+
+- **`SECURITY.md`**, plus private vulnerability reporting switched on for the
+  repository. The plugin ecosystem has no security-reporting channel, so this
+  plugin carries its own — and it states the whole footprint (what it reads,
+  creates, exposes over HTTP, and adds to the prompt and the UI), so that a
+  mismatch between that document and the code is itself a report.
+- **Access and compatibility sections in both READMEs**: the footprint table, the
+  DSH build this was verified against (`@deepseek-ai/dsh` 0.1.5-rc.2, commit
+  `0e77055`), the Node floor, the public seams used, and the fact that the plugin
+  adds **no tools** — so installing it does not push tool descriptions into the
+  cached prefix.
+- **CI** (`.github/workflows/ci.yml`): the suite on every push, plus a check that
+  the committed `lib/` is exactly what the sources build — the discipline that
+  makes the one-command git install honest.
+- **`publish.yml`**: releases publish from a tag through npm trusted publishing
+  (OIDC) with a signed provenance attestation and no stored token. It is also the
+  path that keeps working after npm retires direct publishing for bypass-2FA
+  tokens in January 2027.
+- **Dependabot** for the two dev dependencies, the lockfile, and the workflows.
+
+### Fixed
+
+- Both READMEs claimed 38 tests and 69 checks. The suite has 88.
+
 ## [0.1.0] — 2026-09-20
 
 First release.

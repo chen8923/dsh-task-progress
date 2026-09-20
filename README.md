@@ -32,10 +32,10 @@ write and the human's to read.
 ## Install
 
 ```bash
-# from npm (once published)
+# from npm — one command, which installs the plugin and registers it in the profile
 dsh plugin --profile web add dsh-task-progress
 
-# from a git checkout
+# from git, if you would rather install the repository itself
 dsh plugin --profile web add github:chen8923/dsh-task-progress
 
 # from a local checkout of this repository (see Development)
@@ -46,8 +46,43 @@ DSH mounts a profile bundle at startup, so **restart DSH** afterwards. The plugi
 requires the Web profile (`webServer`, `connection`, `shellEnv`, and the right
 sidebar); in a composition without them it stays unloaded and changes nothing.
 
-The git install is one command with nothing to allow: the built plugin is
-committed, so there is no build step for pnpm to gate.
+The repository and the npm package share one name, so `dsh plugin add
+dsh-task-progress` cannot resolve to somebody else's package — there is no
+discovery-name/install-name gap to get wrong here. The git install is also one
+command with nothing to allow: the built plugin is committed, so there is no
+build step for pnpm to gate.
+
+## Compatibility
+
+| | |
+| --- | --- |
+| **DSH** | Built and verified against `@deepseek-ai/dsh` 0.1.5-rc.2 (commit `0e77055`), Web profile. |
+| **Node** | The plugin runs on Node 20+ (`engines`). The suite needs Node 22.18+ — it executes the TypeScript sources directly through type stripping. |
+| **DSH seams used** | `webServer`, `connection`, `shellEnv`, `settings`, `systemPrompt`, `slots`, `sidebarRightTabs`, `locale`, `settingsScope`. Every one is optional at the call site: a composition missing a seam loses that one surface and nothing else. |
+| **Dependencies** | None at runtime. The host half imports Node built-ins; the browser half ships everything it owns and treats `react` as a platform external. |
+| **Conflicts** | It claims no path another plugin owns. It adds one key to `shell.overlay`, one right-sidebar tab and one settings card — the same additive registration the shipped plugins use — plus its own route, settings namespace and prompt section, all named `task-progress`. |
+
+## Access and footprint
+
+Installing a DSH plugin is not a sandboxed act — the plugin runs in the DSH
+process, with that process's privileges. So here is the entire footprint, before
+you install rather than after. This is the same table [`SECURITY.md`](SECURITY.md)
+commits to, and a mismatch between it and the code is itself a security report.
+
+| Surface | Exactly what happens |
+| --- | --- |
+| **Files read** | `<root>/.dsh-progress/<session-id>/<task>.jsonl`, tail-only (256 KiB per file by default). `<root>` is a workspace directory a shell call handed the plugin, plus any absolute roots you configure. Nothing else is opened. |
+| **Files created** | `<workspace>/.dsh-progress/<session-id>/`, on a session's first shell call. The settings card writes that namespace's user layer through DSH's own settings service. |
+| **Shell environment** | Every shell call gains `DSH_PROGRESS_DIR` and `DSH_PROGRESS_CLI`. |
+| **Network** | None. No outbound request, no telemetry, no update check, no child process. |
+| **HTTP** | One route, `GET`/`HEAD /plugins/task-progress/state`, fenced by DSH's own `connection.requestRejection` before it reads anything, answering for exactly one session at a time, with no filesystem path in the response. |
+| **Model context** | One **static** system-prompt section, beside DSH's background-job guidance. |
+| **Tools** | **None.** The tool catalogue is untouched — so, unlike most plugins, this one does not push new tool descriptions into the cached prefix, and nothing it does at runtime changes the prompt. It costs the cache one short section, once. |
+| **UI** | One overlay entry, one right-sidebar tab, one settings card — additive keys in shared list slots. |
+| **Memory** | Bounded by configuration: `maxTasks` tasks per document, `messagesPerTask` messages per task, `fileTailBytes` per file, and a 64-directory LRU of known progress directories. |
+
+Report a vulnerability through [private vulnerability reporting](SECURITY.md)
+rather than a public issue.
 
 ## Use
 
@@ -196,7 +231,7 @@ rehydrate a schema envelope at all.
 ## Development
 
 ```bash
-npm test          # 38 tests, one process (works in restricted sandboxes)
+npm test          # 88 tests, one process (works in restricted sandboxes)
 npm run test:runner   # the same suite through node --test
 npm run build         # requires tsdown
 ```
@@ -209,7 +244,9 @@ src/host/              settings namespace, store, shell-environment contributor,
 src/client/            polling store, formatting, settings form, React components, slots, styles
 bin/dsh-progress.mjs   the dependency-free producer CLI
 docs/PROTOCOL.md       the file contract and every configuration key
-test/                  protocol, store, formatting, host-wiring, settings, prompt, and release suites
+test/                  twelve suites: protocol, store, formatting, host wiring,
+                       settings, settings form, prompt section, session hook,
+                       client store, CLI, bundle, release
 tools/                 test entry and the build/pack/install script
 ```
 
@@ -226,15 +263,22 @@ directly through type stripping), while the plugin itself runs on Node 20+.
 ### Releasing
 
 ```bash
-npm test                                  # 69 checks, one process
-npm publish                               # builds first, then publishes
-git tag v0.1.0 && git push --tags
+npm test                                  # 88 checks, one process
+git push && git tag v0.1.1 && git push origin v0.1.1   # CI publishes it, with provenance
+npm publish                               # manual fallback: builds first, then publishes
 ```
 
 `test/release.test.ts` fails if the version in `package.json` is not also stated
 in both READMEs and the changelog, if a documented example is missing from
 `files`, or if the repository links disagree with the install instructions — so
 the four places a version or a URL appears cannot drift apart.
+
+Tagging publishes through `.github/workflows/publish.yml`, once the trusted
+publisher is configured on npm (repository `chen8923/dsh-task-progress`, workflow
+`publish.yml`). That path holds no token, and it attaches a signed provenance
+attestation tying the tarball to the commit. A hand-run `npm publish` keeps
+working for as long as npm lets a 2FA-bypassing token publish — it retires that
+in January 2027 — but it can never carry provenance.
 
 ## License
 

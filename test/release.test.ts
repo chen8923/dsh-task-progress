@@ -27,9 +27,10 @@ test('the version is stated in four places and invented in none', () => {
 
 test('every path the READMEs tell a user to run ships in the package', () => {
   const pkg = JSON.parse(read('package.json')) as { files: string[] }
-  // The READMEs name the example script, the documented protocol, and the host
-  // and browser entry points; a published install must contain all of them.
-  for (const required of ['examples/simulate.ps1', 'docs/PROTOCOL.md', 'bin/dsh-progress.mjs', 'cordis.patch.yml', 'lib/index.js', 'lib/client.js']) {
+  // The READMEs name the example script, the documented protocol, the security
+  // policy, and the host and browser entry points; a published install must
+  // contain all of them, or a shipped README links to something that is not there.
+  for (const required of ['examples/simulate.ps1', 'docs/PROTOCOL.md', 'bin/dsh-progress.mjs', 'cordis.patch.yml', 'lib/index.js', 'lib/client.js', 'SECURITY.md']) {
     const covered = pkg.files.some(entry => entry === required || required.startsWith(`${entry}/`))
     assert.ok(covered, `package.json files does not ship ${required}`)
   }

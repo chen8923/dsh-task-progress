@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Two dev dependencies and one lockfile: a rebuild is only reproducible while
+  # the bundler version is the one the committed `lib/` was built with, so these
+  # PRs deserve a look at the CI build check before merging.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        patterns: ['*']
+
+  # The workflows are part of the supply chain: a stale action is an unaudited
+  # dependency that runs with a token.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

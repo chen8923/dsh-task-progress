@@ -1,0 +1,70 @@
+# Publish to npm from a tag, with a signed provenance attestation.
+#
+# This is the path npm recommends, and it is the one that keeps working: no
+# long-lived token exists anywhere, the registry trusts this exact workflow
+# through OIDC, and the tarball is published with an attestation that ties it to
+# this commit and this run. That matters twice over, because npm is retiring
+# direct publishing for bypass-2FA granular tokens (targeted for January 2027) —
+# the mechanism a local `npm publish` still leans on today.
+#
+# One-time setup on npm (needs your 2FA): package page → Settings →
+# Trusted Publisher → GitHub Actions, then fill in EXACTLY:
+#
+#   Organization or user : chen8923
+#   Repository           : dsh-task-progress
+#   Workflow filename    : publish.yml
+#   Environment          : (leave empty)
+#
+# After that, a release is:
+#
+#   npm version patch          # or edit by hand, then run the suite
+#   git push && git push origin v0.1.1
+#
+# and the tag does the publishing. A local `npm publish` still works as a
+# fallback for as long as npm allows it; it just cannot carry provenance.
+name: Publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# `id-token: write` is the whole mechanism: it lets the runner ask GitHub for a
+# short-lived OIDC token, which npm exchanges for publish permission. Without
+# it, trusted publishing cannot work — and no secret is needed with it.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing landed in npm 11.5.1; the npm bundled with Node 22 is
+      # older than that, and the workflow would fail with a confusing 404.
+      - name: Use an npm that speaks trusted publishing
+        run: npm install --global npm@latest
+
+      - name: Install exactly what the lockfile pins
+        run: npm ci
+
+      - name: The suite has to pass before anything leaves the machine
+        run: npm test
+
+      # A tag that disagrees with package.json publishes the wrong version to a
+      # place you cannot take it back from.
+      - name: The tag and package.json must name the same version
+        run: |
+          node -e "const v=require('./package.json').version; const t=process.env.GITHUB_REF_NAME.replace(/^v/,''); if(v!==t){console.error('tag '+t+' != package.json '+v); process.exit(1)} console.log('tag and package.json agree on '+v)"
+
+      # `prepublishOnly` rebuilds lib/ from the sources, so the tarball can never
+      # ship a stale bundle. `--provenance` is what adds the attestation.
+      - name: Publish with provenance
+        run: npm publish --provenance --access public

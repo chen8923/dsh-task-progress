@@ -1,0 +1,42 @@
+# What a visitor (and a reviewer reading a submission) can check without
+# trusting the author: the suite passes, and the committed build is the one these
+# sources produce. Installing from git ships `lib/` without running a build, so
+# that second check is the difference between a claim and a fact.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The suites execute the TypeScript sources directly through Node's type
+      # stripping, which needs 22.18+; the plugin itself runs on Node 20+.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Test
+        run: npm test
+
+      # `lib/` is committed on purpose (a git install must be one command), and
+      # the cost of that choice is the discipline of rebuilding it. This is the
+      # line that holds the discipline: a source change that forgot the rebuild
+      # fails here, on every push, instead of on someone else's machine.
+      - name: The committed build must be exactly what the sources produce
+        run: |
+          npm run build
+          git status --porcelain -- lib
+          test -z "$(git status --porcelain -- lib)"
