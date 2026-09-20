@@ -74,9 +74,19 @@ if ($PackOnly) {
 
 Write-Host "== installing into profile '$Profile' =="
 $spec = 'file:' + ($tarball -replace '\\', '/')
+# Prefer invoking the CLI directly. `pnpm dsh ...` runs the checkout's
+# `packageManager` field through pnpm's version switch, which replaces the pnpm
+# that then installs into the profile; the profile's node_modules were linked by
+# a different major version and pnpm refuses to touch them ("this error may
+# happen if the node_modules was installed with a different major version of
+# pnpm"). Invoking the CLI directly leaves PATH's pnpm alone.
 $dsh = Resolve-Tool 'dsh'
+$cliBin = Resolve-CheckoutTool 'apps/cli/lib/bin.js'
+$node = Resolve-Tool 'node'
 if ($dsh) {
   & $dsh plugin --profile $Profile add $spec
+} elseif ($cliBin -and $node) {
+  & $node $cliBin plugin --profile $Profile add $spec
 } elseif ($Checkout -and (Test-Path $Checkout)) {
   Push-Location $Checkout
   try { Invoke-Pnpm @('dsh', 'plugin', '--profile', $Profile, 'add', $spec) } finally { Pop-Location }
