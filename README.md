@@ -38,7 +38,7 @@ dsh plugin --profile web add dsh-task-progress
 # from a git checkout
 dsh plugin --profile web add github:chen8923/dsh-task-progress
 
-# from a local build
+# from a local checkout of this repository (see Development)
 ./tools/rebuild.ps1 -Profile web -Checkout <path-to-dsh-checkout>
 ```
 
