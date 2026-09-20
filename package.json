@@ -32,6 +32,8 @@
     "bin/dsh-progress.mjs",
     "cordis.patch.yml",
     "docs",
+    "examples",
+    "CHANGELOG.md",
     "README.md",
     "README.zh.md",
     "LICENSE"

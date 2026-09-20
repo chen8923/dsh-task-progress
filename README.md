@@ -4,7 +4,7 @@
 structured progress to a file; the Web UI shows it in a floating overlay and a
 right-sidebar tab — no polling the agent, no waiting for the command to finish.
 
-[中文](README.zh.md)
+**Version 0.1.0** · MIT · [中文](README.zh.md) · [Changelog](CHANGELOG.md)
 
 ```
 ┌──────────────────────────────────────┐

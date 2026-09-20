@@ -2,7 +2,7 @@
 
 **DeepSeek Harness 长任务实时进度。** 脚本把结构化进度写进文件，Web 界面用**悬浮窗**和**右侧栏 tab**展示——不用问 agent，也不用等命令跑完。
 
-[English](README.md)
+**版本 0.1.0** · MIT · [English](README.md) · [更新日志](CHANGELOG.md)
 
 ```
 ┌──────────────────────────────────────┐
