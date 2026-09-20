@@ -1,9 +1,15 @@
-# Build products: `lib/` is produced by `npm run build` and shipped through the
-# package `files` list, never through git.
+# Dependencies are never committed.
 node_modules/
-lib/
 *.tgz
 *.tsbuildinfo
+
+# `lib/` IS committed, deliberately: this plugin installs from git
+# (`dsh plugin --profile web add github:chen8923/dsh-task-progress`), and a
+# git-hosted package that has to build needs pnpm's build-script allowlist,
+# keyed by the exact commit — which turns a one-line install into a two-step
+# one whose second step changes on every push. Shipping the build makes the
+# install a single command. Run `npm run build` and commit `lib/` with any
+# source change; `test/bundle.test.ts` fails if the two drift or go missing.
 
 # Runtime state this plugin and its producers create.
 .dsh-progress/

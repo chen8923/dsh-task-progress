@@ -46,10 +46,8 @@ DSH mounts a profile bundle at startup, so **restart DSH** afterwards. The plugi
 requires the Web profile (`webServer`, `connection`, `shellEnv`, and the right
 sidebar); in a composition without them it stays unloaded and changes nothing.
 
-A git install builds the plugin from source through its `prepare` script, which
-pnpm blocks for git dependencies until you allow it. If the install stops there,
-DSH prints the exact key to add under `allowBuilds` in the profile's
-`pnpm-workspace.yaml`; add it and re-run.
+The git install is one command with nothing to allow: the built plugin is
+committed, so there is no build step for pnpm to gate.
 
 ## Use
 
@@ -215,10 +213,15 @@ test/                  protocol, store, formatting, host-wiring, settings, promp
 tools/                 test entry and the build/pack/install script
 ```
 
-`lib/` is not committed: `npm run build` produces it, and `prepublishOnly` runs
-that build so a publish can never ship a package without its entry points. The
-suites run on Node 22.18+ (they execute the TypeScript sources directly through
-type stripping), while the plugin itself runs on Node 20+.
+**`lib/` is committed, and that is load-bearing.** A git-hosted package that has
+to build needs pnpm's build-script allowlist, whose key contains the exact commit
+— so the install would take two steps and the second one would change on every
+push. Shipping the build makes it one command, at the cost of discipline: after
+any source change, run `npm run build` and commit `lib/` in the same commit.
+`test/bundle.test.ts` fails if the build is missing, is not a loader bundle, or
+no longer carries what the sources define. `prepublishOnly` still builds for
+`npm publish`. The suites run on Node 22.18+ (they execute the TypeScript sources
+directly through type stripping), while the plugin itself runs on Node 20+.
 
 ### Releasing
 
