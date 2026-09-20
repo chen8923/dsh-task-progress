@@ -268,6 +268,38 @@ test('config falls back to defaults and clamps hostile values', () => {
   assert.deepEqual(clamped.roots, ['a', 'b'])
 })
 
+test('a settings write replaces the configured roots without dropping the composition\'s own', () => {
+  const base = mkdtempSync(join(tmpdir(), 'dtp-baseroot-'))
+  const configured = mkdtempSync(join(tmpdir(), 'dtp-confroot-'))
+  try {
+    const baseDir = join(base, CONFIG_DEFAULTS.dirName, 'session-base')
+    mkdirSync(baseDir, { recursive: true })
+    writeFileSync(join(baseDir, 'from-base.jsonl'), '{"task":"from-base","pct":1}\n', 'utf8')
+    const configuredDir = join(configured, CONFIG_DEFAULTS.dirName, 'session-keep')
+    mkdirSync(configuredDir, { recursive: true })
+    writeFileSync(join(configuredDir, 'kept.jsonl'), '{"task":"kept","pct":2}\n', 'utf8')
+
+    const store = createTaskStore(readConfig({}))
+    // The order `apply` uses: the composition's own root, then the settings.
+    store.addRoot(base)
+    store.setRoots([configured])
+    store.scan(1)
+    assert.deepEqual(store.snapshot(1, 'session-base').tasks.map(task => task.task), ['from-base'])
+    assert.deepEqual(store.snapshot(1, 'session-keep').tasks.map(task => task.task), ['kept'])
+
+    // A settings write with an empty roots list — the default — must not take
+    // the base root with it. That regression shipped once and made every answer
+    // empty, which is exactly what this test is for.
+    store.setRoots([])
+    store.scan(2)
+    assert.deepEqual(store.snapshot(2, 'session-base').tasks.map(task => task.task), ['from-base'])
+    assert.deepEqual(store.snapshot(2, 'session-keep').tasks, [])
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+    rmSync(configured, { recursive: true, force: true })
+  }
+})
+
 test('a snapshot answers only for the session it is asked about', () => {
   const f = fixture()
   try {

@@ -192,7 +192,14 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
   /** Directories handed out through `remember`; discovery never claims these. */
   const remembered = new Set<string>()
   const files = new Map<string, FileRecord>()
-  const extraRoots = new Set<string>()
+  /**
+   * Roots the plugin always looks under, added by the composition itself (its
+   * working directory). Kept apart from the configured roots so a settings write
+   * that replaces those cannot also drop these.
+   */
+  const baseRoots = new Set<string>()
+  /** Roots the settings namespace configures; `setRoots` replaces exactly these. */
+  const configRoots = new Set<string>()
 
   const remember = (root: string, sessionId: string): string | null => {
     if (root.length === 0 || !isValidSessionSegment(sessionId)) return null
@@ -225,7 +232,7 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
   }
 
   const discover = (): void => {
-    for (const root of extraRoots) {
+    for (const root of new Set([...baseRoots, ...configRoots])) {
       const parent = join(root, config.dirName)
       let entries: ReturnType<typeof readdirSync>
       try {
@@ -380,15 +387,18 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
   return {
     remember,
     addRoot: (root: string) => {
-      if (root.length > 0) extraRoots.add(root)
+      if (root.length > 0) baseRoots.add(root)
     },
     setRoots: (roots: readonly string[]) => {
-      extraRoots.clear()
-      for (const root of roots.slice(0, 32)) if (root.length > 0) extraRoots.add(root)
-      // A directory that only the removed roots had discovered is stale now;
-      // one a session reported through `remember` stays, because that session
-      // is still running and will keep writing there.
-      for (const dir of [...dirs.keys()]) if (!remembered.has(dir)) forgetDir(dir)
+      configRoots.clear()
+      for (const root of roots.slice(0, 32)) if (root.length > 0) configRoots.add(root)
+      // A discovered directory whose root is gone is stale now; one a session
+      // reported through `remember` stays, because that session is still running
+      // and will keep writing there — and so does anything under a base root.
+      const live = new Set([...baseRoots, ...configRoots])
+      for (const [dir, tracked] of [...dirs]) {
+        if (!remembered.has(dir) && !live.has(tracked.root)) forgetDir(dir)
+      }
     },
     reconfigure: (next: TaskProgressConfig) => {
       config = { ...next }
