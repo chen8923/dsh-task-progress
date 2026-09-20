@@ -29,7 +29,7 @@ DSH 的 `pwsh`/`bash` 工具不是流式的：前台命令的输出要等命令�
 dsh plugin --profile web add dsh-task-progress
 
 # 从 git 仓库
-dsh plugin --profile web add github:<owner>/dsh-task-progress
+dsh plugin --profile web add github:chen8923/dsh-task-progress
 
 # 从本地源码构建
 ./tools/rebuild.ps1 -Profile web -Checkout <DSH checkout 路径>

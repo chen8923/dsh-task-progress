@@ -1,7 +1,6 @@
 {
   "name": "dsh-task-progress",
   "version": "0.1.0",
-  "private": true,
   "description": "Live progress for long-running DSH tasks: a script reports structured progress to a per-session directory, and the Web UI shows it in a floating overlay and a right-sidebar tab.",
   "keywords": [
     "dsh",
@@ -12,6 +11,18 @@
     "long-running-task"
   ],
   "license": "MIT",
+  "author": "chen8923",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chen8923/dsh-task-progress.git"
+  },
+  "homepage": "https://github.com/chen8923/dsh-task-progress#readme",
+  "bugs": {
+    "url": "https://github.com/chen8923/dsh-task-progress/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -41,7 +52,8 @@
   "scripts": {
     "build": "tsdown",
     "test": "node tools/test.mjs",
-    "test:runner": "node --test test/"
+    "test:runner": "node --test test/",
+    "prepublishOnly": "npm run build"
   },
   "dsh": {
     "bundle": {

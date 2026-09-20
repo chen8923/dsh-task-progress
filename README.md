@@ -36,7 +36,7 @@ write and the human's to read.
 dsh plugin --profile web add dsh-task-progress
 
 # from a git checkout
-dsh plugin --profile web add github:<owner>/dsh-task-progress
+dsh plugin --profile web add github:chen8923/dsh-task-progress
 
 # from a local build
 ./tools/rebuild.ps1 -Profile web -Checkout <path-to-dsh-checkout>
@@ -197,13 +197,31 @@ Source layout:
 
 ```
 src/protocol.ts        the shared contract (pure, bundled into both halves)
-src/host/              settings namespace, store, shell-environment contributor, HTTP route, entry
+src/host/              settings namespace, store, shell-environment contributor, HTTP route, prompt section, entry
 src/client/            polling store, formatting, settings form, React components, slots, styles
 bin/dsh-progress.mjs   the dependency-free producer CLI
 docs/PROTOCOL.md       the file contract and every configuration key
-test/                  protocol, store, formatting, host-wiring, and settings suites
+test/                  protocol, store, formatting, host-wiring, settings, prompt, and release suites
 tools/                 test entry and the build/pack/install script
 ```
+
+`lib/` is not committed: `npm run build` produces it, and `prepublishOnly` runs
+that build so a publish can never ship a package without its entry points. The
+suites run on Node 22.18+ (they execute the TypeScript sources directly through
+type stripping), while the plugin itself runs on Node 20+.
+
+### Releasing
+
+```bash
+npm test                                  # 69 checks, one process
+npm publish                               # builds first, then publishes
+git tag v0.1.0 && git push --tags
+```
+
+`test/release.test.ts` fails if the version in `package.json` is not also stated
+in both READMEs and the changelog, if a documented example is missing from
+`files`, or if the repository links disagree with the install instructions — so
+the four places a version or a URL appears cannot drift apart.
 
 ## License
 

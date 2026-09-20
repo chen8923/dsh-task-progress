@@ -58,3 +58,33 @@ test('the manifest still declares what the loader needs', () => {
     )
   }
 })
+
+test('the distribution links are filled in, and all say the same thing', () => {
+  const pkg = JSON.parse(read('package.json')) as {
+    private?: boolean
+    repository?: { url?: string }
+    homepage?: string
+    bugs?: { url?: string }
+    publishConfig?: { access?: string }
+    author?: string
+  }
+  // `private: true` makes npm refuse the publish outright.
+  assert.notEqual(pkg.private, true, 'package.json is still private')
+  assert.equal(pkg.publishConfig?.access, 'public')
+  assert.ok(pkg.author && pkg.author.length > 0, 'no author')
+  const match = /github\.com[/:](?<owner>[^/]+)\/(?<repo>[^/#.]+)/.exec(pkg.repository?.url ?? '')
+  assert.ok(match?.groups, `repository.url is not a GitHub URL: ${String(pkg.repository?.url)}`)
+  const { owner, repo } = match.groups as { owner: string, repo: string }
+  const slug = `${owner}/${repo}`
+  assert.match(pkg.homepage ?? '', new RegExp(`github\\.com/${literal(slug)}`), 'homepage disagrees with repository')
+  assert.match(pkg.bugs?.url ?? '', new RegExp(`github\\.com/${literal(slug)}`), 'bugs disagrees with repository')
+  // The install instructions and the changelog must name the same project, so
+  // a placeholder can never ship unnoticed.
+  for (const file of ['README.md', 'README.zh.md']) {
+    assert.match(read(file), new RegExp(`github:${literal(slug)}\\b`), `${file} does not install from ${slug}`)
+  }
+  assert.match(read('CHANGELOG.md'), new RegExp(`github\\.com/${literal(slug)}`), 'CHANGELOG links elsewhere')
+  assert.doesNotMatch(read('README.md'), /<owner>/, 'README.md still has an owner placeholder')
+  assert.doesNotMatch(read('README.zh.md'), /<owner>/, 'README.zh.md still has an owner placeholder')
+  assert.doesNotMatch(read('CHANGELOG.md'), /OWNER/, 'CHANGELOG.md still has an owner placeholder')
+})

@@ -40,4 +40,4 @@ First release.
 - Zero runtime dependencies: the host half imports Node built-ins only, and the
   browser half bundles everything it owns (React is a platform external).
 
-[0.1.0]: https://github.com/OWNER/dsh-task-progress/releases/tag/v0.1.0
+[0.1.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.0
