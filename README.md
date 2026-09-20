@@ -46,6 +46,11 @@ DSH mounts a profile bundle at startup, so **restart DSH** afterwards. The plugi
 requires the Web profile (`webServer`, `connection`, `shellEnv`, and the right
 sidebar); in a composition without them it stays unloaded and changes nothing.
 
+A git install builds the plugin from source through its `prepare` script, which
+pnpm blocks for git dependencies until you allow it. If the install stops there,
+DSH prints the exact key to add under `allowBuilds` in the profile's
+`pnpm-workspace.yaml`; add it and re-run.
+
 ## Use
 
 Inside a DSH shell call the plugin hands the script its directory:
