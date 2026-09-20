@@ -1,5 +1,22 @@
+# Build products: `lib/` is produced by `npm run build` and shipped through the
+# package `files` list, never through git.
 node_modules/
 lib/
 *.tgz
+*.tsbuildinfo
+
+# Runtime state this plugin and its producers create.
 .dsh-progress/
 *.log
+
+# Editor and OS leftovers, so a contributor's tooling cannot end up in the
+# published history.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local configuration and secrets: never committed, and never needed to build.
+.npmrc
+.env
+.env.*
