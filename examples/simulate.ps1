@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Simulate a long-running task that reports structured progress.
 

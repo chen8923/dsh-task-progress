@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Build this plugin, pack it, and install it into a DSH profile.
 

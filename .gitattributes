@@ -1,0 +1,9 @@
+# Keep line endings stable across platforms: the repo stores LF and checks out
+# LF everywhere. Without this a Windows clone rewrites every file it touches and
+# the diff noise buries real changes.
+* text=auto eol=lf
+
+# These scripts carry a UTF-8 BOM (Windows PowerShell 5.1 decodes a BOM-less
+# script as ANSI and mangles non-ASCII text), so Git must never rewrite their
+# bytes or line endings.
+*.ps1 -text
