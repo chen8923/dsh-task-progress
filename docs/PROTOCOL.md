@@ -81,12 +81,15 @@ age out.
 
 ## Configuration
 
-A plugin row may set any of these; each has a default, and unusable values are
-clamped rather than fatal.
+Every key has a default, and unusable values are clamped rather than fatal. They
+are editable in **Settings → Plugins → Plugin configuration → Task progress**:
+saving writes the namespace's user layer into `$DSH_HOME/settings.yaml`, and
+resetting a field removes the override so the value falls back to the plugin
+row's `config` and then to the default below.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `dirName` | `.dsh-progress` | Directory under each root. |
+| `dirName` | `.dsh-progress` | Directory under each root. Composition-level only: it is part of every path already written, so the settings panel does not expose it. |
 | `scanMs` | `1000` | Host re-read interval. |
 | `pollMs` | `2000` | Interval advertised to the browser half. |
 | `retainMs` | `1800000` | How long a finished task stays visible. |
@@ -95,7 +98,13 @@ clamped rather than fatal.
 | `maxFileBytes` | `262144` | Tail read from one progress file. |
 | `roots` | `[]` | Extra absolute roots to discover directories under. |
 
+A settings change is live. The Host half re-points its store, re-reads the extra
+roots, and picks up a new scan interval on its next tick; the state document's
+`pollMs` is read from the same value, so the browser follows without a reload.
+
 ```yaml
+# A plugin row may still configure the composition base layer, which is what a
+# field reverts to when the user clears it:
 - insert:
     - id: dsh-task-progress
       name: dsh-task-progress

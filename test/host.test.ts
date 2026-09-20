@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { STATE_ROUTE } from '../src/protocol.ts'
+import { STATE_ROUTE, SETTINGS_NAMESPACE } from '../src/protocol.ts'
 import { readConfig } from '../src/host/config.ts'
 import { apply } from '../src/host/index.ts'
 import { stateHandler, type ConnectionLike } from '../src/host/routes.ts'
@@ -128,10 +128,12 @@ test('the environment contributor hands out a per-session directory', () => {
   }
 })
 
-test('apply() wires the route and the environment, and disposes both', () => {
+test('apply() wires the route, the environment, and the settings namespace, and disposes them', () => {
   const routes: { kind: string, path: string }[] = []
   const disposers: (() => void)[] = []
   let contributors = 0
+  const registered: string[] = []
+  let watched = 0
   const context = {
     effect: (callback: () => void | (() => void)) => {
       const dispose = callback()
@@ -153,12 +155,38 @@ test('apply() wires the route and the environment, and disposes both', () => {
         return () => { contributors -= 1 }
       },
     },
+    settings: {
+      register: (ns: string, schema: { (value: unknown): unknown }) => {
+        registered.push(ns)
+        return {
+          get: () => schema({}),
+          watch: () => {
+            watched += 1
+            return () => { watched -= 1 }
+          },
+          update: async () => {},
+          replace: async () => {},
+        }
+      },
+    },
   }
-  apply(context as never, { scanMs: 60_000 })
+  // The host half picks the optional settings provider up through `ctx.inject`,
+  // so the fake context runs that callback immediately when the dep is listed.
+  const withInject = context as typeof context & {
+    inject: (deps: readonly string[], callback: (scope: typeof context) => void) => void
+  }
+  withInject.inject = (deps, callback) => {
+    if (deps.includes('settings')) callback(context)
+  }
+  apply(withInject as never, { scanMs: 60_000 })
   assert.deepEqual(routes.map(route => ({ kind: route.kind, path: route.path })), [{ kind: 'exact', path: STATE_ROUTE }])
+  assert.deepEqual(registered, [SETTINGS_NAMESPACE])
+  assert.equal(watched, 1)
   assert.equal(contributors, 1)
-  // Three effects: environment, route, scan loop. Disposing them unregisters.
+  // Four effects: settings changes, environment, route, scan loop. Disposing
+  // them unregisters everything.
   for (const dispose of disposers) dispose()
   assert.deepEqual(routes, [])
   assert.equal(contributors, 0)
+  assert.equal(watched, 0)
 })

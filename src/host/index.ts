@@ -1,12 +1,15 @@
 /**
  * Host half of `dsh-task-progress`.
  *
- * Three seams, each with exactly one job:
+ * Four seams, each with exactly one job:
  *
- * 1. {@link registerProgressEnv} hands every session shell call a progress
+ * 1. {@link registerProgressSettings} registers the settings namespace whose
+ *    knobs the browser's configuration card edits, with this plugin row's own
+ *    `config` as the composition base layer.
+ * 2. {@link registerProgressEnv} hands every session shell call a progress
  *    directory (`DSH_PROGRESS_DIR`) — the only thing a producer has to know.
- * 2. {@link createTaskStore} folds whatever lands in those directories.
- * 3. {@link registerStateRoute} serves the folded state to the Web UI behind the
+ * 3. {@link createTaskStore} folds whatever lands in those directories.
+ * 4. {@link registerStateRoute} serves the folded state to the Web UI behind the
  *    composition's authentication fence.
  *
  * The plugin never touches the background-job registry, and in particular never
@@ -22,10 +25,15 @@ import { fileURLToPath } from 'node:url'
 import { STATE_ROUTE } from '../protocol.ts'
 import { readConfig, type TaskProgressConfig } from './config.ts'
 import { registerStateRoute, type ConnectionLike, type WebServerLike } from './routes.ts'
+import { registerProgressSettings, type SettingsProviderLike } from './settings.ts'
 import { registerProgressEnv, type ShellEnvLike } from './shell-env.ts'
 import { createTaskStore, type TaskStore } from './store.ts'
 
 export { CONFIG_DEFAULTS, readConfig, type TaskProgressConfig } from './config.ts'
+export {
+  SETTINGS_NAMESPACE, progressSchema, registerProgressSettings, resolveProgressSettings,
+  type ProgressSettings, type SchemaLike, type SchemaNodeLike, type SettingsProviderLike, type SettingsScopeLike,
+} from './settings.ts'
 export { createTaskStore, type StoreStats, type TaskStore } from './store.ts'
 export { PROGRESS_CLI_KEY, PROGRESS_DIR_KEY, registerProgressEnv, type ShellEnvLike } from './shell-env.ts'
 export { registerStateRoute, stateHandler, type ConnectionLike, type WebServerLike } from './routes.ts'
@@ -33,13 +41,28 @@ export { registerStateRoute, stateHandler, type ConnectionLike, type WebServerLi
 /** Cordis function-plugin name. */
 export const name = 'task-progress'
 
-/** The routes, the trust fence, and the environment registry this plugin needs. */
+/**
+ * The routes, the trust fence, and the environment registry this plugin needs.
+ *
+ * `settings` is deliberately absent: a settings provider is optional in a
+ * composition, so it is picked up through `ctx.inject` below. Requiring it here
+ * would take the whole plugin down — no route, no environment — in a deployment
+ * that simply has no settings document.
+ */
 export const inject = ['webServer', 'connection', 'shellEnv'] as const
 
 /** The slice of the host context this plugin uses. */
 export interface TaskProgressHostContext {
   /** Cordis effect: runs the callback and disposes its return value with the fiber. */
   effect(callback: () => void | (() => void), label: string): void
+  /**
+   * Cordis inject: runs the callback once every named service exists, on a
+   * child context that has them. Used here for the optional settings provider.
+   */
+  inject(
+    deps: readonly string[],
+    callback: (scope: TaskProgressHostContext & { readonly settings: SettingsProviderLike }) => void,
+  ): void
   readonly webServer: WebServerLike
   readonly connection: ConnectionLike
   readonly shellEnv: ShellEnvLike
@@ -65,32 +88,53 @@ function resolveCliPath(): string | null {
 /**
  * Load the plugin.
  * @param ctx - the host context carrying the route table, trust fence, and environment registry.
- * @param rawConfig - this plugin row's configuration, of unknown shape.
+ * @param rawConfig - this plugin row's configuration, of unknown shape; it becomes the settings base layer.
  */
 export function apply(ctx: TaskProgressHostContext, rawConfig?: unknown): void {
-  const config: TaskProgressConfig = readConfig(rawConfig)
-  const store: TaskStore = createTaskStore(config)
+  const store: TaskStore = createTaskStore(readConfig(rawConfig))
   // The composition's own working directory is always worth a look: it covers a
   // deployment whose sessions were created before this plugin was installed.
   store.addRoot(process.cwd())
-  for (const root of config.roots) store.addRoot(root)
 
   const cliPath = resolveCliPath()
   ctx.effect(() => registerProgressEnv(ctx.shellEnv, store, cliPath), 'task-progress: progress environment')
   ctx.effect(() => registerStateRoute(ctx.webServer, ctx.connection, store), `task-progress: GET ${STATE_ROUTE}`)
   ctx.effect(() => {
+    let active = true
+    let timer: ReturnType<typeof setTimeout> | null = null
     const tick = (): void => {
+      if (!active) return
       try {
         store.scan()
       } catch {
         // A scan must never take the host down; a broken workspace heals on the
         // next tick, and the store keeps serving its last good fold.
       }
+      if (!active) return
+      // Self-rescheduling rather than an interval, so a settings change to the
+      // period takes effect on the next tick without re-arming anything.
+      timer = setTimeout(tick, store.periodMs())
+      // A scan loop must not be the reason a process stays alive.
+      timer.unref?.()
     }
     tick()
-    const timer = setInterval(tick, config.scanMs)
-    // A scan loop must not be the reason a process stays alive.
-    timer.unref?.()
-    return () => clearInterval(timer)
+    return () => {
+      active = false
+      if (timer !== null) clearTimeout(timer)
+    }
   }, 'task-progress: scan loop')
+
+  // Settings are optional. A composition with no settings provider still gets
+  // the progress environment, the route, and both panels; its plugin row's
+  // `config` is simply the whole configuration, and nothing exposes a page.
+  ctx.inject(['settings'], (withSettings) => {
+    const scope = registerProgressSettings(withSettings.settings, rawConfig)
+    const applySettings = (next: TaskProgressConfig): void => {
+      store.reconfigure(next)
+      store.setRoots(next.roots)
+      store.scan()
+    }
+    applySettings(scope.get())
+    withSettings.effect(() => scope.watch((next: TaskProgressConfig) => { applySettings(next) }), 'task-progress: settings changes')
+  })
 }

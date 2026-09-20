@@ -101,6 +101,30 @@ dsh-task-progress protocol), or use
 Never read the progress file back — it is for the human.
 ```
 
+## Settings
+
+The plugin registers one settings namespace, so its knobs are editable where
+every plugin's are: **Settings → Plugins → Plugin configuration → Task progress**.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| Scan interval (ms) | `1000` | How often the Host half re-reads changed progress files. |
+| Poll interval (ms) | `2000` | How often the browser asks for progress. |
+| Keep finished for (ms) | `1800000` | How long a finished task stays listed. |
+| Messages per task | `30` | Recent messages kept per task. |
+| Max tasks | `200` | Cap on tasks in one state document. |
+| File tail bytes | `262144` | Bytes read from the tail of one progress file. |
+| Extra roots | – | Absolute paths whose `.dsh-progress` is scanned too. |
+
+Saving writes the namespace's user layer into `$DSH_HOME/settings.yaml`; pressing
+**Reset** (or emptying a field) removes the override, so the value falls back to
+the plugin row's `config` and then to the schema default. Changes apply live: a
+new scan interval re-arms the Host loops on their next tick, and the state
+document's `pollMs` follows the value the browser should use.
+
+`dirName` is deliberately absent from the panel — it is part of every path
+already written, so it stays a composition-level setting on the plugin row.
+
 ## Design
 
 Three layers, each independently replaceable — the point is that neither a
@@ -110,7 +134,7 @@ producer nor the UI knows about the other, and neither knows about DSH internals
 | --- | --- | --- |
 | **Protocol** (`docs/PROTOCOL.md`) | Append-only JSONL, one file per task | Any language, no IPC, no ports, no auth, survives restarts. Works with the plugin uninstalled — the files are just files. |
 | **Host half** | `ctx.shellEnv` contributor + directory poll + one HTTP route | Uses only public DSH seams (`webServer`, `connection`, `shellEnv`), and never touches the job registry. |
-| **Browser half** | One polling store, two surfaces (`shell.overlay` + a sidebar tab) | Both surfaces read the same snapshot, so adding or removing one never touches the data path. |
+| **Browser half** | One polling store, two panels (`shell.overlay` + a sidebar tab), and a settings card | The panels read the same snapshot and the card reads its own namespace scope, so adding or removing a surface never touches the data path. |
 
 **Why the plugin does not read job output.** `ctx.jobs.read()` consumes a
 single-consumer cursor that belongs to the model's `job_output` tool; a browser
@@ -126,9 +150,13 @@ there is no reconnect logic to get wrong. The interval comes from the Host
 half's configuration.
 
 **Zero dependencies.** The host half imports Node built-ins only; the browser
-half bundles everything it owns and treats `react` as a platform external. There
-is no CSS toolchain (the stylesheet is a string the module injects) and no
-runtime package to keep in sync.
+half bundles everything it owns and treats `react` as a platform external. That
+extends to the settings schema: `ctx.settings.register` takes a schemastery
+schema, and this plugin supplies a minimal compatible node — callable for
+resolution, `toJSON()` in schemastery's reference-graph form, and walkable by the
+settings redactor — instead of depending on a package that a profile install
+cannot resolve. Its own browser card passes a decoder so it never has to
+rehydrate a schema envelope at all.
 
 ### What it deliberately does not do
 
@@ -153,11 +181,11 @@ Source layout:
 
 ```
 src/protocol.ts        the shared contract (pure, bundled into both halves)
-src/host/              config, store, shell-environment contributor, HTTP route, entry
-src/client/            polling store, formatting, React components, slots, styles
+src/host/              settings namespace, store, shell-environment contributor, HTTP route, entry
+src/client/            polling store, formatting, settings form, React components, slots, styles
 bin/dsh-progress.mjs   the dependency-free producer CLI
 docs/PROTOCOL.md       the file contract and every configuration key
-test/                  protocol, store, formatting, and host-wiring suites
+test/                  protocol, store, formatting, host-wiring, and settings suites
 tools/                 test entry and the build/pack/install script
 ```
 

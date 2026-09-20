@@ -73,6 +73,18 @@ export interface TaskStore {
   remember(root: string, sessionId: string): string | null
   /** Discover every `<root>/<dirName>/<session>` under one extra root. */
   addRoot(root: string): void
+  /** Replace the extra discovery roots; directories only those roots found are forgotten. */
+  setRoots(roots: readonly string[]): void
+  /** Replace the live configuration after a settings change. */
+  reconfigure(next: TaskProgressConfig): void
+  /**
+   * The current scan period, in milliseconds.
+   *
+   * The scan loop reads this every tick instead of capturing an interval, which
+   * is what makes a settings change to `scanMs` take effect without re-arming
+   * anything.
+   */
+  periodMs(): number
   /** Re-read changed files and drop what has aged out. */
   scan(now?: number): void
   /** The document the browser half receives. */
@@ -157,11 +169,19 @@ function fold(
 
 /**
  * Create the store.
- * @param config - the resolved plugin configuration.
+ * @param initial - the resolved configuration this store starts from.
  * @returns the store the rest of the Host half uses.
  */
-export function createTaskStore(config: TaskProgressConfig): TaskStore {
+export function createTaskStore(initial: TaskProgressConfig): TaskStore {
+  /**
+   * The live configuration. Every read below goes through this binding, so a
+   * settings change takes effect on the next tick without rebuilding the store
+   * — which matters because the HTTP route holds a reference to it.
+   */
+  let config: TaskProgressConfig = { ...initial }
   const dirs = new Map<string, TrackedDir>()
+  /** Directories handed out through `remember`; discovery never claims these. */
+  const remembered = new Set<string>()
   const files = new Map<string, FileRecord>()
   const extraRoots = new Set<string>()
 
@@ -170,6 +190,7 @@ export function createTaskStore(config: TaskProgressConfig): TaskStore {
     const dir = join(root, config.dirName, sessionId)
     if (!dirs.has(dir) && dirs.size >= MAX_DIRS) return dir
     dirs.set(dir, { root, sessionId })
+    remembered.add(dir)
     try {
       mkdirSync(dir, { recursive: true })
     } catch {
@@ -292,6 +313,18 @@ export function createTaskStore(config: TaskProgressConfig): TaskStore {
     addRoot: (root: string) => {
       if (root.length > 0) extraRoots.add(root)
     },
+    setRoots: (roots: readonly string[]) => {
+      extraRoots.clear()
+      for (const root of roots.slice(0, 32)) if (root.length > 0) extraRoots.add(root)
+      // A directory that only the removed roots had discovered is stale now;
+      // one a session reported through `remember` stays, because that session
+      // is still running and will keep writing there.
+      for (const dir of [...dirs.keys()]) if (!remembered.has(dir)) forgetDir(dir)
+    },
+    reconfigure: (next: TaskProgressConfig) => {
+      config = { ...next }
+    },
+    periodMs: () => config.scanMs,
     scan,
     snapshot,
     stats: () => {

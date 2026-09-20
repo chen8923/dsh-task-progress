@@ -15,6 +15,13 @@ export const PROTOCOL_VERSION = 1
 /** The read-only state endpoint the Host half serves and the browser half polls. */
 export const STATE_ROUTE = '/plugins/task-progress/state'
 
+/**
+ * The settings namespace this plugin registers on the Host and keys its browser
+ * card on. Spelled once, here, because both halves must agree on it and the two
+ * halves must not import each other (the browser bundle may not pull Node code).
+ */
+export const SETTINGS_NAMESPACE = 'task-progress'
+
 /** Where a task is in its life. A terminal state ends one run. */
 export type TaskState = 'running' | 'done' | 'failed' | 'cancelled'
 

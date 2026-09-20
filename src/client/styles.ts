@@ -299,8 +299,202 @@ const CSS = `
   line-height: 16px;
 }
 
+/* ---- settings card, inside DSH's plugin configuration section ---- */
+
+.dtp-set {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin, rgba(128, 128, 128, 0.25));
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-layer-1, rgba(128, 128, 128, 0.06));
+  color: var(--dsw-alias-label-primary, #e8e8ea);
+  font-size: 13px;
+}
+
+/* The header is the disclosure toggle, exactly as the shipped cards are: the
+   whole row is the button, so the gesture is the same everywhere. */
+.dtp-setHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dtp-setHeader:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.08)); }
+
+.dtp-setHeadText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dtp-setChevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary, #8b8b95);
+  transition: transform 160ms ease;
+}
+
+.dtp-setChevronOpen { transform: rotate(180deg); }
+
+.dtp-setBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 14px 14px;
+}
+
+.dtp-setTitle { font-weight: 600; }
+
+.dtp-setDescription {
+  color: var(--dsw-alias-label-tertiary, #8b8b95);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dtp-setFields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dtp-setField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dtp-setLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dtp-setLabel { color: var(--dsw-alias-label-secondary, #a9a9b2); }
+
+/* The unsaved marker the collapsed header carries, and the per-field override
+   badge — the same shape, two different facts. */
+.dtp-setPending,
+.dtp-setOverride {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dtp-setPending { color: var(--dsw-alias-label-secondary, #a9a9b2); }
+.dtp-setOverride { color: var(--dsw-alias-state-business-primary, #4f8cff); }
+
+.dtp-setReset {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.3));
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-secondary, #a9a9b2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dtp-setReset:disabled { opacity: 0.4; cursor: default; }
+.dtp-setReset:not(:disabled):hover { color: var(--dsw-alias-label-primary, #e8e8ea); }
+
+.dtp-setInput {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.3));
+  border-radius: 8px;
+  background: var(--dsw-specific-input-major, rgba(128, 128, 128, 0.08));
+  color: var(--dsw-alias-label-primary, #e8e8ea);
+  font: inherit;
+  font-size: 13px;
+}
+
+.dtp-setInput:focus {
+  border-color: var(--dsw-alias-state-business-primary, #4f8cff);
+  outline: none;
+}
+
+.dtp-setInput[aria-invalid] { border-color: var(--dsw-alias-state-error-primary, #e5534b); }
+
+.dtp-setTextarea {
+  min-height: 62px;
+  resize: vertical;
+  font-family: var(--dsw-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+}
+
+.dtp-setHint {
+  color: var(--dsw-alias-label-tertiary, #8b8b95);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.dtp-setHintBad { color: var(--dsw-alias-state-error-primary, #e5534b); }
+
+.dtp-setFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dtp-setFootText {
+  display: flex;
+  gap: 8px;
+  margin-right: auto;
+}
+
+.dtp-setSave {
+  padding: 5px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-business-primary, #4f8cff);
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dtp-setSave:disabled { opacity: 0.45; cursor: default; }
+
+.dtp-setDiscard {
+  padding: 5px 12px;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.3));
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-secondary, #a9a9b2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dtp-setDiscard:disabled { opacity: 0.4; cursor: default; }
+.dtp-setDiscard:not(:disabled):hover { color: var(--dsw-alias-label-primary, #e8e8ea); }
+
+.dtp-setNotice {
+  color: var(--dsw-alias-label-tertiary, #8b8b95);
+  font-size: 12px;
+}
+
+.dtp-setNoticeBad { color: var(--dsw-alias-state-error-primary, #e5534b); }
+
 @media (prefers-reduced-motion: reduce) {
   .dtp-fill { transition: none; }
+  .dtp-setChevron { transition: none; }
   .dtp-fill[data-indeterminate],
   .dtp-spinner { animation: none; }
 }
