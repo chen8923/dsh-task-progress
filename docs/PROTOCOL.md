@@ -26,6 +26,12 @@ Outside a DSH shell call (a scheduled job, a human at a terminal) the variable i
 simply absent; pass the directory explicitly, or configure extra roots with the
 plugin's `roots` option.
 
+The bundled CLI's `--task` follows the same rule as the reader, so it cannot
+leave the progress directory. Its `--file` option deliberately does not: it
+writes exactly the path given, which makes it the right tool for a producer
+whose file layout is fixed and the wrong tool for anything whose arguments come
+from somewhere you do not control (`clear --file` removes that path).
+
 ## One line per event
 
 Each line is a JSON object. Fields are optional; **the last value of each field
@@ -67,17 +73,31 @@ sends that one thing.
 
 The Host half polls the directories it knows about (default every second) and
 re-reads only files whose size or mtime moved. It folds each file into one task
-record and serves the whole set as one document:
+record and answers **one session at a time**:
 
 ```
-GET /plugins/task-progress/state        (same origin, cookie-authenticated)
+GET /plugins/task-progress/state?session=<session-id>   (same origin, cookie-authenticated)
 {"v":1,"generatedAt":1730000000123,"pollMs":2000,"tasks":[ ... ]}
 ```
+
+The session is part of the request, not a filter applied afterwards. DSH's web
+login is a fence around the whole instance rather than around a session, so an
+endpoint that answered "everything this process knows" would hand any
+authenticated caller every other session's task names and messages. A request
+that names no session is therefore answered with an empty document, and an
+unknown session id is indistinguishable from one with nothing to report.
+
+The wire carries no filesystem path: a task is its session id, its task id, its
+state, its message and its counters, and nothing else. Task names and messages
+are still the *producer's* text — a script that puts a secret in a `--msg` value
+is publishing it to anyone holding this instance's login.
 
 The browser half polls that endpoint (every `pollMs` while work is running, and
 more slowly when idle) and renders it in the floating overlay and the sidebar
 tab. Finished tasks stay visible for `retainMs` (30 minutes by default), then
-age out.
+age out. `maxTasks` bounds both the document and the Host's in-memory task set,
+so a producer that mints a new task id on every line cannot grow the process
+without bound.
 
 ## Configuration
 

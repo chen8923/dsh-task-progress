@@ -35,7 +35,7 @@ export interface ProgressOverlayProps {
  */
 export function ProgressOverlay({ t, useSessions }: ProgressOverlayProps): ReactNode {
   const current = useCurrentSession(useSessions)
-  const state: ProgressState | null = useProgress()
+  const state: ProgressState | null = useProgress(current)
   const [open, setOpen] = useState(false)
   const tick = (state?.tasks.length ?? 0) > 0
   const now = useNow(1000, tick)

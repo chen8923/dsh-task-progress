@@ -22,6 +22,20 @@ export const STATE_ROUTE = '/plugins/task-progress/state'
  */
 export const SETTINGS_NAMESPACE = 'task-progress'
 
+/**
+ * The state URL for one session.
+ *
+ * The session is a required part of the request rather than a filter applied
+ * after the fact: the endpoint answers for exactly the session asked about, so a
+ * caller cannot read a sibling session's task names by asking for everything.
+ * Omitting it is a valid request that returns no tasks at all.
+ * @param sessionId - the session whose tasks to read.
+ * @returns the relative URL to fetch.
+ */
+export function stateUrl(sessionId: string): string {
+  return `${STATE_ROUTE}?session=${encodeURIComponent(sessionId)}`
+}
+
 /** Where a task is in its life. A terminal state ends one run. */
 export type TaskState = 'running' | 'done' | 'failed' | 'cancelled'
 
@@ -73,8 +87,6 @@ export interface ProgressEvent {
 export interface ProgressTask {
   /** Session that reported it, taken from the directory name. */
   readonly sessionId: string
-  /** Workspace root that owns the progress directory. */
-  readonly root: string
   /** Task id. */
   readonly task: string
   /** Current state. */
@@ -233,7 +245,6 @@ function parseTask(raw: unknown): ProgressTask | null {
     : []
   return {
     sessionId: typeof record['sessionId'] === 'string' ? record['sessionId'] : '',
-    root: typeof record['root'] === 'string' ? record['root'] : '',
     task,
     state,
     pct: clampPct(record['pct']),

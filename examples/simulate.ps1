@@ -31,6 +31,11 @@ $ErrorActionPreference = 'Stop'
 if (-not $Dir) {
   throw 'no progress directory: run inside a DSH shell call, or pass -Dir <path>'
 }
+# The task id becomes a file name, so the reader's rule is this script's rule
+# too: without it, -Task '..\..\x' would write outside the directory above.
+if ($Task -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$') {
+  throw "invalid -Task '$Task': use 1-40 of A-Z a-z 0-9 . _ -"
+}
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 $file = Join-Path $Dir "$Task.jsonl"
 

@@ -40,4 +40,20 @@ First release.
 - Zero runtime dependencies: the host half imports Node built-ins only, and the
   browser half bundles everything it owns (React is a platform external).
 
+### Security
+
+First release, so these are properties rather than changes:
+
+- The state endpoint is scoped to one session per request and carries no
+  filesystem paths. DSH's web login fences the instance, not a session, so an
+  unscoped endpoint would expose every session's task names to any authenticated
+  caller.
+- `maxTasks` bounds the Host's in-memory task set as well as the wire document,
+  so a producer cannot grow the process by minting task ids.
+- Producer input is constrained by regular expressions at every level that
+  becomes a path (session segment, task id, directory name), and the store reads
+  only `*.jsonl` files it finds inside those directories.
+- No runtime dependencies, no `postinstall`, no network calls from either half,
+  and no HTML injection surface in the browser half.
+
 [0.1.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.0

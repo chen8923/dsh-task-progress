@@ -1,24 +1,26 @@
 /**
- * The one request this plugin makes: read the Host half's state document.
+ * The one request this plugin makes: read one session's state document.
  *
  * Same-origin and cookie-authenticated, exactly like the shell's own plugin
  * endpoints — the Host half fences the route with the composition's connection
- * trust, so this call carries the page's session and nothing more.
+ * trust, and the session travels as a query parameter so the answer is scoped to
+ * what the caller is actually showing.
  *
  * @module dsh-task-progress/client/api
  */
 
-import { STATE_ROUTE, parseState, type ProgressState } from '../protocol.ts'
+import { parseState, stateUrl, type ProgressState } from '../protocol.ts'
 
 /**
- * Read the current state.
+ * Read one session's current state.
+ * @param sessionId - the session to read; the endpoint answers for exactly this one.
  * @param signal - caller lifetime; aborting it cancels the request.
  * @returns the parsed state, or null when the read did not produce a usable
  *   document (offline, rejected, mid-restart). Callers keep their last value.
  */
-export async function fetchState(signal: AbortSignal): Promise<ProgressState | null> {
+export async function fetchState(sessionId: string, signal: AbortSignal): Promise<ProgressState | null> {
   try {
-    const response = await fetch(STATE_ROUTE, {
+    const response = await fetch(stateUrl(sessionId), {
       method: 'GET',
       credentials: 'same-origin',
       cache: 'no-store',

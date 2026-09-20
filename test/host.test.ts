@@ -39,7 +39,7 @@ async function serve(handler: Parameters<typeof createServer>[0]) {
   }
 }
 
-test('the state route serves folded tasks to a trusted caller', async () => {
+test('the state route serves the named session to a trusted caller', async () => {
   const f = fixtureRoot()
   const store = createTaskStore(readConfig({}))
   store.addRoot(f.root)
@@ -47,13 +47,43 @@ test('the state route serves folded tasks to a trusted caller', async () => {
   const trusted: ConnectionLike = { requestRejection: () => undefined }
   const http = await serve(stateHandler(trusted, store))
   try {
-    const response = await fetch(http.url)
+    const response = await fetch(`${http.url}?session=session-1`)
     assert.equal(response.status, 200)
     assert.equal(response.headers.get('cache-control'), 'no-store')
-    const body = await response.json() as { v: number, pollMs: number, tasks: { task: string, pct: number }[] }
+    const body = await response.json() as { v: number, pollMs: number, tasks: { task: string, pct: number, root?: unknown }[] }
     assert.equal(body.v, 1)
     assert.equal(body.pollMs, 2000)
     assert.deepEqual(body.tasks.map(task => [task.task, task.pct]), [['build', 30]])
+    // The absolute workspace root is not on the wire at all: the panel never
+    // needed it, and a filesystem path is not this endpoint's business.
+    assert.equal('root' in (body.tasks[0] ?? {}), false)
+  } finally {
+    await http.close()
+    f.cleanup()
+  }
+})
+
+test('the state route answers for one session and never for everything', async () => {
+  const f = fixtureRoot()
+  // A second session's work exists in the same store, as it does in real use.
+  const other = join(f.root, '.dsh-progress', 'session-2')
+  mkdirSync(other, { recursive: true })
+  writeFileSync(join(other, 'secret-job.jsonl'), '{"task":"secret-job","pct":80}\n', 'utf8')
+  const store = createTaskStore(readConfig({}))
+  store.addRoot(f.root)
+  store.scan()
+  const trusted: ConnectionLike = { requestRejection: () => undefined }
+  const http = await serve(stateHandler(trusted, store))
+  try {
+    const own = await (await fetch(`${http.url}?session=session-1`)).json() as { tasks: { task: string }[] }
+    assert.deepEqual(own.tasks.map(task => task.task), ['build'])
+
+    // A request that names no session gets an empty document, not the union of
+    // every session this process knows about.
+    const everything = await (await fetch(http.url)).json() as { tasks: unknown[] }
+    assert.deepEqual(everything.tasks, [])
+    const unknown = await (await fetch(`${http.url}?session=does-not-exist`)).json() as { tasks: unknown[] }
+    assert.deepEqual(unknown.tasks, [])
   } finally {
     await http.close()
     f.cleanup()
@@ -67,7 +97,7 @@ test('the state route refuses an untrusted caller before reading anything', asyn
   const fenced: ConnectionLike = { requestRejection: () => 403 }
   const http = await serve(stateHandler(fenced, store))
   try {
-    const response = await fetch(http.url)
+    const response = await fetch(`${http.url}?session=session-1`)
     assert.equal(response.status, 403)
     assert.equal(await response.text(), '')
   } finally {
@@ -82,10 +112,10 @@ test('the state route answers only GET and HEAD', async () => {
   const trusted: ConnectionLike = { requestRejection: () => undefined }
   const http = await serve(stateHandler(trusted, store))
   try {
-    const response = await fetch(http.url, { method: 'POST' })
+    const response = await fetch(`${http.url}?session=session-1`, { method: 'POST' })
     assert.equal(response.status, 405)
     assert.equal(response.headers.get('allow'), 'GET, HEAD')
-    const head = await fetch(http.url, { method: 'HEAD' })
+    const head = await fetch(`${http.url}?session=session-1`, { method: 'HEAD' })
     assert.equal(head.status, 200)
   } finally {
     await http.close()

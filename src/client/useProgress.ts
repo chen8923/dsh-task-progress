@@ -9,17 +9,29 @@
  * @module dsh-task-progress/client/useProgress
  */
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { ProgressState } from '../protocol.ts'
 import { progressStore, type ProgressStore } from './store.ts'
 
 /**
- * Subscribe to the progress document.
+ * Subscribe to one session's progress document.
+ *
+ * The subscription is per session because the Host half answers per session: a
+ * surface only ever holds the data of the session it is showing.
+ * @param sessionId - the session to read; undefined reads nothing and renders none.
  * @param store - the store to read; defaults to the page's single store.
  * @returns the latest document, or null before the first successful poll.
  */
-export function useProgress(store: ProgressStore = progressStore): ProgressState | null {
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
+export function useProgress(sessionId: string | undefined, store: ProgressStore = progressStore): ProgressState | null {
+  const subscribe = useCallback(
+    (listener: () => void) => sessionId === undefined ? () => {} : store.subscribe(sessionId, listener),
+    [store, sessionId],
+  )
+  const getSnapshot = useCallback(
+    () => sessionId === undefined ? null : store.getSnapshot(sessionId),
+    [store, sessionId],
+  )
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 /**

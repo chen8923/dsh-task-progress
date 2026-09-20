@@ -34,7 +34,15 @@ import type { TaskProgressConfig } from './config.ts'
 /** Suffix of a progress file. */
 const FILE_SUFFIX = '.jsonl'
 
-/** Most progress directories the host half will track at once. */
+/**
+ * Most progress directories the host half watches at once.
+ *
+ * A long-lived instance sees a new session id for every session, fork and
+ * subagent, so this cap is reached in normal use. It is a working-set bound, not
+ * a refusal: the least recently used directory is evicted to make room, because
+ * silently leaving a live session untracked would lose its progress with no
+ * symptom anywhere.
+ */
 const MAX_DIRS = 64
 
 /** Most progress files tracked per directory. */
@@ -44,6 +52,8 @@ const MAX_FILES_PER_DIR = 64
 interface TrackedDir {
   readonly root: string
   readonly sessionId: string
+  /** Last time a session reported through it or a scan visited it; the eviction key. */
+  lastUsedAt: number
 }
 
 /** One file's last fold, keyed by the change signal that produced it. */
@@ -87,8 +97,8 @@ export interface TaskStore {
   periodMs(): number
   /** Re-read changed files and drop what has aged out. */
   scan(now?: number): void
-  /** The document the browser half receives. */
-  snapshot(now?: number): ProgressState
+  /** The document one session receives. */
+  snapshot(now?: number, sessionId?: string): ProgressState
   /** How much is being tracked right now. */
   stats(): StoreStats
 }
@@ -116,7 +126,7 @@ function readTail(path: string, maxBytes: number): string {
 /** Fold one file's lines into task records. */
 function fold(
   text: string,
-  base: { sessionId: string; root: string; fallbackTask: string; fallbackAt: number; historyLimit: number },
+  base: { sessionId: string; fallbackTask: string; fallbackAt: number; historyLimit: number },
 ): Map<string, ProgressTask> {
   const tasks = new Map<string, ProgressTask>()
   for (const line of text.split('\n')) {
@@ -129,7 +139,6 @@ function fold(
     if (current === undefined) {
       current = {
         sessionId: base.sessionId,
-        root: base.root,
         task: id,
         state: 'running',
         pct: null,
@@ -188,8 +197,8 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
   const remember = (root: string, sessionId: string): string | null => {
     if (root.length === 0 || !isValidSessionSegment(sessionId)) return null
     const dir = join(root, config.dirName, sessionId)
-    if (!dirs.has(dir) && dirs.size >= MAX_DIRS) return dir
-    dirs.set(dir, { root, sessionId })
+    if (!dirs.has(dir) && dirs.size >= MAX_DIRS) evictLeastRecent()
+    dirs.set(dir, { root, sessionId, lastUsedAt: Date.now() })
     remembered.add(dir)
     try {
       mkdirSync(dir, { recursive: true })
@@ -198,6 +207,21 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
       // report: the directory simply yields no files, and the next scan skips it.
     }
     return dir
+  }
+
+  /** Drop the directory nothing has touched for longest, to make room for a new one. */
+  const evictLeastRecent = (): void => {
+    let oldest: string | undefined
+    let oldestAt = Number.POSITIVE_INFINITY
+    for (const [dir, tracked] of dirs) {
+      if (tracked.lastUsedAt < oldestAt) {
+        oldest = dir
+        oldestAt = tracked.lastUsedAt
+      }
+    }
+    if (oldest === undefined) return
+    forgetDir(oldest)
+    remembered.delete(oldest)
   }
 
   const discover = (): void => {
@@ -210,10 +234,15 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
         continue
       }
       for (const entry of entries) {
-        if (dirs.size >= MAX_DIRS) return
         if (!entry.isDirectory() || !isValidSessionSegment(entry.name)) continue
         const dir = join(parent, entry.name)
-        if (!dirs.has(dir)) dirs.set(dir, { root, sessionId: entry.name })
+        const existing = dirs.get(dir)
+        if (existing !== undefined) {
+          existing.lastUsedAt = Date.now()
+          continue
+        }
+        if (dirs.size >= MAX_DIRS) evictLeastRecent()
+        dirs.set(dir, { root, sessionId: entry.name, lastUsedAt: Date.now() })
       }
     }
   }
@@ -225,6 +254,7 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
   }
 
   const scanDir = (dir: string, tracked: TrackedDir, now: number): void => {
+    tracked.lastUsedAt = now
     let entries: ReturnType<typeof readdirSync>
     try {
       entries = readdirSync(dir, { withFileTypes: true })
@@ -252,7 +282,6 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
       try {
         tasks = fold(readTail(path, config.maxFileBytes), {
           sessionId: tracked.sessionId,
-          root: tracked.root,
           fallbackTask: entry.name.slice(0, -FILE_SUFFIX.length),
           fallbackAt: Math.round(stats.mtimeMs),
           historyLimit: config.historyLimit,
@@ -281,25 +310,65 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
       }
       scanDir(dir, tracked, now)
     }
+    enforceBudget()
   }
 
-  const snapshot = (now = Date.now()): ProgressState => {
-    const all: ProgressTask[] = []
+  /** Running work first, then the most recently touched, then by id — a total order. */
+  const better = (left: ProgressTask, right: ProgressTask): number => {
+    const leftLive = isTerminal(left.state) ? 1 : 0
+    const rightLive = isTerminal(right.state) ? 1 : 0
+    if (leftLive !== rightLive) return leftLive - rightLive
+    if (right.updatedAt !== left.updatedAt) return right.updatedAt - left.updatedAt
+    return left.task.localeCompare(right.task)
+  }
+
+  /**
+   * Keep the in-memory task set inside the bound the wire document already uses.
+   *
+   * `maxTasks` is the deployment's statement about how many tasks are worth
+   * showing, and holding more than that serves nobody; the fold alone cannot
+   * bound it, because a file may legally carry a new task id on every line.
+   * Eviction drops the least interesting rows first (settled, then oldest), and a
+   * running task evicted here returns on its next append — that append changes
+   * the file, and a changed file is re-folded from scratch.
+   */
+  const enforceBudget = (): void => {
+    const budget = Math.max(1, config.maxTasks)
+    let total = 0
+    for (const record of files.values()) total += record.tasks.size
+    if (total <= budget) return
+    const rows: { tasks: Map<string, ProgressTask>, task: ProgressTask }[] = []
     for (const record of files.values()) {
-      for (const task of record.tasks.values()) {
-        if (isTerminal(task.state) && now - task.updatedAt > config.retainMs) continue
-        all.push(task)
+      for (const task of record.tasks.values()) rows.push({ tasks: record.tasks, task })
+    }
+    rows.sort((left, right) => better(left.task, right.task))
+    for (const row of rows.slice(budget)) row.tasks.delete(row.task.task)
+  }
+
+  /**
+   * The document one session receives.
+   *
+   * The session is required, not optional: answering "everything this process
+   * knows" would hand any authenticated caller every other session's task names
+   * and messages — the fence is the instance's login, not a session. A caller
+   * that names no session gets an empty document, which is exactly what a
+   * session with nothing to report gets.
+   * @param now - current clock, epoch milliseconds.
+   * @param sessionId - the session to answer for; absent answers for none.
+   * @returns the session's tasks, ranked the way the panel reads them.
+   */
+  const snapshot = (now = Date.now(), sessionId?: string): ProgressState => {
+    const all: ProgressTask[] = []
+    if (sessionId !== undefined && sessionId.length > 0) {
+      for (const record of files.values()) {
+        for (const task of record.tasks.values()) {
+          if (task.sessionId !== sessionId) continue
+          if (isTerminal(task.state) && now - task.updatedAt > config.retainMs) continue
+          all.push(task)
+        }
       }
     }
-    // Running work first, then the most recently touched — the order the panel
-    // reads top to bottom.
-    all.sort((left, right) => {
-      const leftLive = isTerminal(left.state) ? 1 : 0
-      const rightLive = isTerminal(right.state) ? 1 : 0
-      if (leftLive !== rightLive) return leftLive - rightLive
-      if (right.updatedAt !== left.updatedAt) return right.updatedAt - left.updatedAt
-      return left.task.localeCompare(right.task)
-    })
+    all.sort(better)
     return {
       v: PROTOCOL_VERSION,
       generatedAt: now,

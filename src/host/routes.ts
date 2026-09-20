@@ -31,6 +31,21 @@ export interface ConnectionLike {
 }
 
 /**
+ * The session one request asks about.
+ *
+ * The route matches its path exactly, so the query string is the only input it
+ * reads at all: there is no body, no header, and no path segment to interpret.
+ * @param req - the incoming request.
+ * @returns the session id, or undefined when the caller named none.
+ */
+function requestedSession(req: IncomingMessage): string | undefined {
+  // Node always sets `url` on a server request; String keeps that fact local.
+  const url = new URL(String(req.url ?? '/'), 'http://localhost')
+  const session = url.searchParams.get('session')
+  return session === null || session.length === 0 ? undefined : session
+}
+
+/**
  * Build the state handler.
  * @param connection - the composition's trust fence.
  * @param store - the store to serialize.
@@ -53,7 +68,9 @@ export function stateHandler(
       res.end()
       return
     }
-    const body = JSON.stringify(store.snapshot())
+    // Scoped to the session the caller named. A request that names none is
+    // answered with an empty document rather than with every session's work.
+    const body = JSON.stringify(store.snapshot(Date.now(), requestedSession(req)))
     res.statusCode = 200
     res.setHeader('content-type', 'application/json; charset=utf-8')
     res.setHeader('cache-control', 'no-store')

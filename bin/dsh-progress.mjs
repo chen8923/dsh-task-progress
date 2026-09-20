@@ -49,7 +49,11 @@ Usage:
 Where the file goes:
   $DSH_PROGRESS_DIR/<task>.jsonl   (set automatically inside DSH model shell calls)
   --dir <path>                     override the directory
-  --file <path>                    write one exact file instead
+
+  --file <path> writes exactly that path and skips the task-id rule entirely, so
+  it can append to any path you can write (creating parent directories) and
+  `clear --file` removes one. Pass it only from a script whose arguments you
+  control; prefer --task, which cannot leave the progress directory.
 
 Examples:
   node "$env:DSH_PROGRESS_CLI" emit --task build --pct 10 --msg "linking"

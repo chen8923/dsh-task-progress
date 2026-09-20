@@ -58,7 +58,7 @@ function EmptyState({ t, unreportedJobs }: { readonly t: Translate, readonly unr
  * @returns the list, or the empty state that documents the contract.
  */
 export function ProgressBody({ t, sessionId, useSessions }: ProgressBodyProps): ReactNode {
-  const state: ProgressState | null = useProgress()
+  const state: ProgressState | null = useProgress(sessionId)
   const unreportedJobs = useRunningJobCount(useSessions, sessionId)
   const tick = (state?.tasks.length ?? 0) > 0
   const now = useNow(1000, tick)

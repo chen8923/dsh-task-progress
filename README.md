@@ -184,6 +184,11 @@ rehydrate a schema envelope at all.
 - **No session lookup.** Directories are learned from the shell calls that were
   handed them, plus configured roots — so the plugin never revives a session or
   reads a path the browser suggested.
+- **No cross-session reads.** The state endpoint answers for exactly one session
+  per request and puts no filesystem path on the wire. DSH's web login fences the
+  whole instance rather than a session, so an endpoint that answered with
+  everything the process knows would hand any authenticated caller every other
+  session's task names and messages.
 
 ## Development
 

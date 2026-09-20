@@ -7,13 +7,22 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   MAX_MESSAGE_CHARS,
+  STATE_ROUTE,
   clampPct,
   isValidTaskId,
   normalizeMessage,
   normalizeState,
   parseEvent,
   parseState,
+  stateUrl,
 } from '../src/protocol.ts'
+
+test('the state URL always names the session it is asking about', () => {
+  assert.equal(stateUrl('session-1'), `${STATE_ROUTE}?session=session-1`)
+  // Encoded, so a session id can never break out of its own query parameter.
+  assert.equal(stateUrl('a b&c=d'), `${STATE_ROUTE}?session=a%20b%26c%3Dd`)
+  assert.match(stateUrl(''), /\?session=$/)
+})
 
 test('parseEvent accepts a full line', () => {
   const event = parseEvent('{"v":1,"task":"build","state":"running","pct":42,"msg":"linking","done":3,"total":9,"unit":"files","at":1730000000000}')
