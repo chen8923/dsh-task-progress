@@ -88,9 +88,17 @@ pwsh ./examples/simulate.ps1 -Task demo -Steps 30 -DelayMs 500
 Then open the **Task progress** tab in the right sidebar (or click the floating
 pill once it appears).
 
-### Make the agent do it
+### Out of the box
 
-Add to your workspace `AGENTS.md` — then long commands report themselves:
+Installing the plugin is enough for the *agent* to know the convention: the host
+half contributes a short section to the system prompt, right where the
+background-jobs guidance already is, so the model arranges progress reporting for
+long commands on its own. There is nothing to configure and no `AGENTS.md` edit —
+a feature that only works after you edit your own instructions is not one you can
+install.
+
+If you want it stronger, or you run a composition without that prompt seam, the
+same instruction can live in your workspace `AGENTS.md`:
 
 ```markdown
 ## Long-running tasks
@@ -100,6 +108,14 @@ dsh-task-progress protocol), or use
 `node "$env:DSH_PROGRESS_CLI" emit --task <id> --pct N --msg "..."`.
 Never read the progress file back — it is for the human.
 ```
+
+### When nothing appears
+
+The panel shows what scripts report; it never reads a running job's output. A
+background job started by a script that does not report is therefore invisible
+here, and existing jobs cannot be retrofitted — but the sidebar tab says so
+instead of looking broken: with jobs live and nothing reported, its empty state
+names the count.
 
 ## Settings
 
@@ -133,7 +149,7 @@ producer nor the UI knows about the other, and neither knows about DSH internals
 | Layer | What it is | Why it is shaped that way |
 | --- | --- | --- |
 | **Protocol** (`docs/PROTOCOL.md`) | Append-only JSONL, one file per task | Any language, no IPC, no ports, no auth, survives restarts. Works with the plugin uninstalled — the files are just files. |
-| **Host half** | `ctx.shellEnv` contributor + directory poll + one HTTP route | Uses only public DSH seams (`webServer`, `connection`, `shellEnv`), and never touches the job registry. |
+| **Host half** | `ctx.shellEnv` contributor + directory poll + one HTTP route + a system-prompt section | Uses only public DSH seams (`webServer`, `connection`, `shellEnv`, `settings`, `systemPrompt`), and never touches the job registry. |
 | **Browser half** | One polling store, two panels (`shell.overlay` + a sidebar tab), and a settings card | The panels read the same snapshot and the card reads its own namespace scope, so adding or removing a surface never touches the data path. |
 
 **Why the plugin does not read job output.** `ctx.jobs.read()` consumes a

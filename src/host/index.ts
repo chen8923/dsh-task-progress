@@ -28,6 +28,7 @@ import { registerStateRoute, type ConnectionLike, type WebServerLike } from './r
 import { registerProgressSettings, type SettingsProviderLike } from './settings.ts'
 import { registerProgressEnv, type ShellEnvLike } from './shell-env.ts'
 import { createTaskStore, type TaskStore } from './store.ts'
+import { registerProgressPrompt, type SystemPromptLike } from './system-prompt.ts'
 
 export { CONFIG_DEFAULTS, readConfig, type TaskProgressConfig } from './config.ts'
 export {
@@ -36,6 +37,9 @@ export {
 } from './settings.ts'
 export { createTaskStore, type StoreStats, type TaskStore } from './store.ts'
 export { PROGRESS_CLI_KEY, PROGRESS_DIR_KEY, registerProgressEnv, type ShellEnvLike } from './shell-env.ts'
+export {
+  PROMPT_ORDER_NAME, PROMPT_SECTION_NAME, progressPromptText, registerProgressPrompt, type SystemPromptLike,
+} from './system-prompt.ts'
 export { registerStateRoute, stateHandler, type ConnectionLike, type WebServerLike } from './routes.ts'
 
 /** Cordis function-plugin name. */
@@ -44,10 +48,11 @@ export const name = 'task-progress'
 /**
  * The routes, the trust fence, and the environment registry this plugin needs.
  *
- * `settings` is deliberately absent: a settings provider is optional in a
- * composition, so it is picked up through `ctx.inject` below. Requiring it here
- * would take the whole plugin down — no route, no environment — in a deployment
- * that simply has no settings document.
+ * `settings` and `systemPrompt` are deliberately absent: both are optional in a
+ * composition, so they are picked up through `ctx.inject` below. Requiring them
+ * here would take the whole plugin down — no route, no environment, no panels —
+ * in a deployment that simply has no settings document, or boots without the
+ * prompt assembly this plugin contributes a section to.
  */
 export const inject = ['webServer', 'connection', 'shellEnv'] as const
 
@@ -57,11 +62,15 @@ export interface TaskProgressHostContext {
   effect(callback: () => void | (() => void), label: string): void
   /**
    * Cordis inject: runs the callback once every named service exists, on a
-   * child context that has them. Used here for the optional settings provider.
+   * child context that has them. Each optional seam below is reached this way;
+   * the callback's declared scope names every service any caller asks for.
    */
   inject(
     deps: readonly string[],
-    callback: (scope: TaskProgressHostContext & { readonly settings: SettingsProviderLike }) => void,
+    callback: (scope: TaskProgressHostContext & {
+      readonly settings: SettingsProviderLike
+      readonly systemPrompt: SystemPromptLike
+    }) => void,
   ): void
   readonly webServer: WebServerLike
   readonly connection: ConnectionLike
@@ -136,5 +145,13 @@ export function apply(ctx: TaskProgressHostContext, rawConfig?: unknown): void {
     }
     applySettings(scope.get())
     withSettings.effect(() => scope.watch((next: TaskProgressConfig) => { applySettings(next) }), 'task-progress: settings changes')
+  })
+
+  // The convention the model needs, for exactly as long as this plugin is
+  // loaded. Without it the panels would stay empty for everyone who has not
+  // edited their own instructions to know about this plugin — which is not a
+  // feature anyone can use out of the box.
+  ctx.inject(['systemPrompt'], (withPrompt) => {
+    withPrompt.effect(() => registerProgressPrompt(withPrompt.systemPrompt), 'task-progress: prompt section')
   })
 }

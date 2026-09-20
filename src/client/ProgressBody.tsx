@@ -13,6 +13,7 @@ import type { ReactNode } from 'react'
 import type { ProgressState } from '../protocol.ts'
 import { countRunning, formatClock, selectTasks } from './format.ts'
 import type { Translate } from './locales.ts'
+import { useRunningJobCount, type SessionsHook } from './session-hook.ts'
 import { TaskRow } from './TaskList.tsx'
 import { useNow, useProgress } from './useProgress.ts'
 
@@ -22,6 +23,8 @@ export interface ProgressBodyProps {
   readonly t: Translate
   /** Standard slot prop: the session this tab belongs to. */
   readonly sessionId?: string
+  /** Standard slot prop: the sessions store, for the unreported-job hint. */
+  readonly useSessions?: SessionsHook
 }
 
 /**
@@ -29,10 +32,16 @@ export interface ProgressBodyProps {
  * @param props - the translator.
  * @returns the empty state.
  */
-function EmptyState({ t }: { readonly t: Translate }): ReactNode {
+function EmptyState({ t, unreportedJobs }: { readonly t: Translate, readonly unreportedJobs: number }): ReactNode {
   return (
     <div className="dtp-empty">
       <span className="dtp-emptyTitle">{t('tab.emptyTitle')}</span>
+      {unreportedJobs > 0
+        // The likeliest reason a reader finds nothing here is a job that is
+        // running without reporting. Naming it is the difference between a
+        // panel that looks broken and one that explains itself.
+        ? <span className="dtp-emptyRunning">{t('tab.emptyRunning', { count: unreportedJobs })}</span>
+        : null}
       <span>{t('tab.emptyBody')}</span>
       <pre className="dtp-code">{`node "$env:DSH_PROGRESS_CLI" emit --task build --pct 10 --msg "linking"
 
@@ -45,16 +54,17 @@ function EmptyState({ t }: { readonly t: Translate }): ReactNode {
 
 /**
  * The right-sidebar tab body.
- * @param props - the translator and this tab's session.
+ * @param props - the translator, this tab's session, and the session selector hook.
  * @returns the list, or the empty state that documents the contract.
  */
-export function ProgressBody({ t, sessionId }: ProgressBodyProps): ReactNode {
+export function ProgressBody({ t, sessionId, useSessions }: ProgressBodyProps): ReactNode {
   const state: ProgressState | null = useProgress()
+  const unreportedJobs = useRunningJobCount(useSessions, sessionId)
   const tick = (state?.tasks.length ?? 0) > 0
   const now = useNow(1000, tick)
   const tasks = selectTasks(state, sessionId, now, 'all')
 
-  if (tasks.length === 0) return <EmptyState t={t} />
+  if (tasks.length === 0) return <EmptyState t={t} unreportedJobs={unreportedJobs} />
 
   const running = countRunning(tasks)
   return (

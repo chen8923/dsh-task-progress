@@ -15,6 +15,7 @@ import { readConfig } from '../src/host/config.ts'
 import { apply } from '../src/host/index.ts'
 import { stateHandler, type ConnectionLike } from '../src/host/routes.ts'
 import { PROGRESS_CLI_KEY, PROGRESS_DIR_KEY, registerProgressEnv, type ShellEnvLike } from '../src/host/shell-env.ts'
+import { PROMPT_SECTION_NAME } from '../src/host/system-prompt.ts'
 import { createTaskStore } from '../src/host/store.ts'
 
 /** A store over a throwaway root with one session directory holding one task. */
@@ -128,11 +129,12 @@ test('the environment contributor hands out a per-session directory', () => {
   }
 })
 
-test('apply() wires the route, the environment, and the settings namespace, and disposes them', () => {
+test('apply() wires the route, the environment, the settings namespace, and the prompt section', () => {
   const routes: { kind: string, path: string }[] = []
   const disposers: (() => void)[] = []
   let contributors = 0
   const registered: string[] = []
+  const sections: string[] = []
   let watched = 0
   const context = {
     effect: (callback: () => void | (() => void)) => {
@@ -169,24 +171,34 @@ test('apply() wires the route, the environment, and the settings namespace, and 
         }
       },
     },
+    systemPrompt: {
+      section: (section: { name: string }) => {
+        sections.push(section.name)
+        return () => {
+          const index = sections.indexOf(section.name)
+          if (index >= 0) sections.splice(index, 1)
+        }
+      },
+      getSectionOrder: () => 1600,
+    },
   }
-  // The host half picks the optional settings provider up through `ctx.inject`,
-  // so the fake context runs that callback immediately when the dep is listed.
+  // The host half picks its optional services up through `ctx.inject`, so the
+  // fake context runs that callback immediately for whichever dep was asked for.
   const withInject = context as typeof context & {
     inject: (deps: readonly string[], callback: (scope: typeof context) => void) => void
   }
-  withInject.inject = (deps, callback) => {
-    if (deps.includes('settings')) callback(context)
-  }
+  withInject.inject = (deps, callback) => { callback(context) }
   apply(withInject as never, { scanMs: 60_000 })
   assert.deepEqual(routes.map(route => ({ kind: route.kind, path: route.path })), [{ kind: 'exact', path: STATE_ROUTE }])
   assert.deepEqual(registered, [SETTINGS_NAMESPACE])
+  assert.deepEqual(sections, [PROMPT_SECTION_NAME])
   assert.equal(watched, 1)
   assert.equal(contributors, 1)
-  // Four effects: settings changes, environment, route, scan loop. Disposing
-  // them unregisters everything.
+  // Five effects: settings changes, environment, route, scan loop, prompt
+  // section. Disposing them unregisters everything.
   for (const dispose of disposers) dispose()
   assert.deepEqual(routes, [])
+  assert.deepEqual(sections, [])
   assert.equal(contributors, 0)
   assert.equal(watched, 0)
 })

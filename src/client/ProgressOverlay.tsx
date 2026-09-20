@@ -16,16 +16,9 @@ import { useState, type ReactNode } from 'react'
 import type { ProgressState } from '../protocol.ts'
 import { countRunning, headlineTask, selectTasks } from './format.ts'
 import type { Translate } from './locales.ts'
+import { useCurrentSession, type SessionsHook } from './session-hook.ts'
 import { TaskRow } from './TaskList.tsx'
 import { useNow, useProgress } from './useProgress.ts'
-
-/** A frame-wide overlay is not session-scoped; the slot offers the selector hook. */
-interface SessionsState {
-  readonly current?: unknown
-}
-
-/** The selector hook `shell.overlay` hands every entry as a standard prop. */
-export type SessionsHook = <T>(selector: (state: SessionsState) => T) => T
 
 /** Props the overlay receives. */
 export interface ProgressOverlayProps {
@@ -33,14 +26,6 @@ export interface ProgressOverlayProps {
   readonly t: Translate
   /** Standard slot prop: the sessions store. Absent only outside the shell. */
   readonly useSessions?: SessionsHook
-}
-
-/** Read the session in view, if the slot gave us the hook. */
-function useCurrentSession(useSessions: SessionsHook | undefined): string | undefined {
-  // The hook is either supplied for this component's whole life or never, so
-  // this branch cannot change between renders and the hook order is stable.
-  const current = useSessions !== undefined ? useSessions(state => state.current) : undefined
-  return typeof current === 'string' && current.length > 0 ? current : undefined
 }
 
 /**

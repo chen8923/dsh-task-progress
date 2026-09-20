@@ -279,6 +279,8 @@ const CSS = `
   font-weight: 600;
 }
 
+.dtp-emptyRunning { color: var(--dsw-alias-state-warn-primary, #d29922); }
+
 .dtp-code {
   margin: 0;
   padding: 8px 10px;
