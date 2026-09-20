@@ -20,6 +20,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 
 /** Task id: also the file's base name, so it must be a safe path segment. */
@@ -34,7 +35,7 @@ const VERSION = 1
 /** Suffix of a progress file. */
 const SUFFIX = '.jsonl'
 
-const HELP = `dsh-progress — report long-task progress to DSH
+export const HELP = `dsh-progress — report long-task progress to DSH
 
 Usage:
   dsh-progress emit  --task <id> [--pct N] [--msg TEXT] [--done N --total N --unit NAME] [--state STATE] [--json]
@@ -51,8 +52,8 @@ Where the file goes:
   --dir <path>                     override the directory
 
   --file <path> writes exactly that path and skips the task-id rule entirely, so
-  it can append to any path you can write (creating parent directories) and
-  `clear --file` removes one. Pass it only from a script whose arguments you
+  it can append to any path you can write (creating parent directories), and
+  "clear --file" removes one. Pass it only from a script whose arguments you
   control; prefer --task, which cannot leave the progress directory.
 
 Examples:
@@ -185,77 +186,93 @@ function list(options) {
   }
 }
 
-const [command, ...rest] = process.argv.slice(2)
+/**
+ * Everything the command line does, behind one entry point.
+ *
+ * The guard matters: this file is imported by the test suite so that a syntax
+ * error in it fails the suite (a long prose template literal is exactly the kind
+ * of thing that can be broken by a stray backtick, and the tests cannot spawn a
+ * process to find out). Importing must therefore have no effect.
+ */
+export function run() {
+  const [command, ...rest] = process.argv.slice(2)
 
-if (command === undefined || command === '--help' || command === '-h' || command === 'help') {
-  process.stdout.write(HELP)
-  process.exit(0)
-}
-if (command === '--version' || command === '-v') {
-  process.stdout.write('dsh-progress 0.1.0\n')
-  process.exit(0)
-}
-
-let options
-try {
-  options = parseArgs({
-    args: rest,
-    strict: true,
-    allowPositionals: false,
-    options: {
-      task: { type: 'string' },
-      state: { type: 'string' },
-      pct: { type: 'string' },
-      msg: { type: 'string' },
-      done: { type: 'string' },
-      total: { type: 'string' },
-      unit: { type: 'string' },
-      dir: { type: 'string' },
-      file: { type: 'string' },
-      json: { type: 'boolean' },
-      help: { type: 'boolean' },
-    },
-  }).values
-} catch (error) {
-  fail(error instanceof Error ? error.message : String(error))
-}
-
-if (options.help === true) {
-  process.stdout.write(HELP)
-  process.exit(0)
-}
-
-switch (command) {
-  case 'emit':
-    emit(options)
-    break
-  case 'done':
-    emit(options, { state: 'done', pct: options.pct === undefined ? 100 : undefined })
-    break
-  case 'fail':
-    emit(options, { state: 'failed' })
-    break
-  case 'cancel':
-    emit(options, { state: 'cancelled' })
-    break
-  case 'path': {
-    const path = options.task === undefined ? directoryOf(options) : fileOf(options)
-    process.stdout.write(`${path}\n`)
-    break
+  if (command === undefined || command === '--help' || command === '-h' || command === 'help') {
+    process.stdout.write(HELP)
+    process.exit(0)
   }
-  case 'list':
-    list(options)
-    break
-  case 'clear': {
-    const path = targetOf(options)
-    if (!existsSync(path)) fail(`no such file ${path}`)
-    try {
-      rmSync(path, { force: true })
-    } catch (error) {
-      fail(`cannot remove ${path}: ${error instanceof Error ? error.message : String(error)}`)
+  if (command === '--version' || command === '-v') {
+    process.stdout.write('dsh-progress 0.1.0\n')
+    process.exit(0)
+  }
+
+  let options
+  try {
+    options = parseArgs({
+      args: rest,
+      strict: true,
+      allowPositionals: false,
+      options: {
+        task: { type: 'string' },
+        state: { type: 'string' },
+        pct: { type: 'string' },
+        msg: { type: 'string' },
+        done: { type: 'string' },
+        total: { type: 'string' },
+        unit: { type: 'string' },
+        dir: { type: 'string' },
+        file: { type: 'string' },
+        json: { type: 'boolean' },
+        help: { type: 'boolean' },
+      },
+    }).values
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error))
+  }
+
+  if (options.help === true) {
+    process.stdout.write(HELP)
+    process.exit(0)
+  }
+
+  switch (command) {
+    case 'emit':
+      emit(options)
+      break
+    case 'done':
+      emit(options, { state: 'done', pct: options.pct === undefined ? 100 : undefined })
+      break
+    case 'fail':
+      emit(options, { state: 'failed' })
+      break
+    case 'cancel':
+      emit(options, { state: 'cancelled' })
+      break
+    case 'path': {
+      const path = options.task === undefined ? directoryOf(options) : fileOf(options)
+      process.stdout.write(`${path}\n`)
+      break
     }
-    break
+    case 'list':
+      list(options)
+      break
+    case 'clear': {
+      const path = targetOf(options)
+      if (!existsSync(path)) fail(`no such file ${path}`)
+      try {
+        rmSync(path, { force: true })
+      } catch (error) {
+        fail(`cannot remove ${path}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      break
+    }
+    default:
+      fail(`unknown command ${JSON.stringify(command)} (try: emit, done, fail, cancel, path, list, clear)`)
   }
-  default:
-    fail(`unknown command ${JSON.stringify(command)} (try: emit, done, fail, cancel, path, list, clear)`)
 }
+
+/** True when this file is the process entry point rather than an import. */
+const isEntryPoint = process.argv[1] !== undefined
+  && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (isEntryPoint) run()
