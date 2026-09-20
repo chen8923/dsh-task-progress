@@ -1,0 +1,18 @@
+# Standard DSH profile bundle. The patch loads the Host half, which registers
+# the progress environment variables and the read-only state route;
+# package.json's `dsh.client` declaration is what makes DSH discover
+# lib/client.js for the Web UI.
+#
+# Optional configuration (every key has a default, see src/host/config.ts):
+#
+#   - insert:
+#       - id: dsh-task-progress
+#         name: dsh-task-progress
+#         config:
+#           dirName: .dsh-progress
+#           scanMs: 1000
+#           pollMs: 2000
+#           retainMs: 1800000
+- insert:
+    - id: dsh-task-progress
+      name: dsh-task-progress
