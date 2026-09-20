@@ -13,7 +13,7 @@
 .EXAMPLE
   ./tools/rebuild.ps1 -Profile web
 .EXAMPLE
-  ./tools/rebuild.ps1 -Profile progress-dev -Checkout /path/to/deepseek-harness
+  ./tools/rebuild.ps1 -Profile web -Checkout /path/to/deepseek-harness
 #>
 param(
   # Profile to install into. Use a scratch profile while developing.
