@@ -21,6 +21,13 @@ const STATE_KEY: Record<TaskState, 'state.running' | 'state.done' | 'state.faile
   cancelled: 'state.cancelled',
 }
 
+/** Locale key per inferred ending, keyed by how the writing job ended. */
+const ENDED_KEY = {
+  completed: 'ended.completed',
+  killed: 'ended.killed',
+  failed: 'ended.failed',
+} as const
+
 /** Props for one task row. */
 export interface TaskRowProps {
   /** The task to describe. */
@@ -70,6 +77,7 @@ export function TaskRow({ task, t, now, showSession = false }: TaskRowProps): Re
   const remaining = estimateRemainingMs(task, now)
   const quiet = isStalled(task, now)
   const elapsed = task.state === 'running' ? now - task.startedAt : task.updatedAt - task.startedAt
+  const ended = task.ended
   return (
     <li className="dtp-row">
       <div className="dtp-rowHead">
@@ -79,6 +87,18 @@ export function TaskRow({ task, t, now, showSession = false }: TaskRowProps): Re
       </div>
       <ProgressBar task={task} />
       {task.msg.length > 0 ? <div className="dtp-msg" title={task.msg}>{task.msg}</div> : null}
+      {/* The state above is inferred from the job's record, not reported by the
+          script — a killed producer never got to write its own ending. Saying
+          which job ended, and how, is the difference between a row that reads
+          as a report and one that reads as what it is. */}
+      {ended !== undefined
+        ? (
+          <div className="dtp-msg dtp-ended" data-state={task.state} title={ended.detail ?? undefined}>
+            {t(ENDED_KEY[ended.status], { job: ended.job })}
+            {ended.detail !== undefined && ended.detail.length > 0 ? ` · ${ended.detail}` : ''}
+          </div>
+        )
+        : null}
       <div className="dtp-meta">
         <span>{t('meta.elapsed', { time: formatDuration(Math.max(0, elapsed)) })}</span>
         {units !== null ? (

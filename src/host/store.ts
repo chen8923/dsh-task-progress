@@ -16,7 +16,7 @@
  */
 
 import { closeSync, existsSync, mkdirSync, openSync, readSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import {
   PROTOCOL_VERSION,
   WIRE_HISTORY,
@@ -27,8 +27,10 @@ import {
   parseEvent,
   type ProgressState,
   type ProgressTask,
+  type TaskEnding,
   type TaskState,
 } from '../protocol.ts'
+import { settleTask, type JobView } from '../jobs.ts'
 import type { TaskProgressConfig } from './config.ts'
 
 /** Suffix of a progress file. */
@@ -73,6 +75,23 @@ export interface StoreStats {
   readonly tasks: number
 }
 
+/**
+ * Where the store asks what happened to the jobs writing these tasks.
+ *
+ * Supplied by the composition rather than imported: the job registry is an
+ * optional service, and a deployment without one must keep serving exactly what
+ * the files say. It is a function of the *session* because that is the key the
+ * store already holds — every progress directory is named after one.
+ */
+export interface SessionJobSource {
+  /**
+   * This session's job projections, terminal ones included.
+   * @param sessionId - the session whose jobs to list.
+   * @returns the jobs, or undefined when this deployment cannot answer.
+   */
+  jobsFor(sessionId: string): readonly JobView[] | undefined
+}
+
 /** The store's public surface. */
 export interface TaskStore {
   /**
@@ -87,6 +106,15 @@ export interface TaskStore {
   setRoots(roots: readonly string[]): void
   /** Replace the live configuration after a settings change. */
   reconfigure(next: TaskProgressConfig): void
+  /**
+   * Point the store at the job registry, or at nothing.
+   *
+   * Nothing is a legitimate state, not a failure: a composition without the job
+   * service keeps the pre-settle behaviour, where a task's ending is whatever
+   * the producer managed to write before it died.
+   * @param source - the reader, or null to stop asking.
+   */
+  setJobSource(source: SessionJobSource | null): void
   /**
    * The current scan period, in milliseconds.
    *
@@ -188,6 +216,8 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
    * — which matters because the HTTP route holds a reference to it.
    */
   let config: TaskProgressConfig = { ...initial }
+  /** The job registry reader, once a composition supplies one; null asks nobody. */
+  let jobs: SessionJobSource | null = null
   const dirs = new Map<string, TrackedDir>()
   /** Directories handed out through `remember`; discovery never claims these. */
   const remembered = new Set<string>()
@@ -271,9 +301,12 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
       return
     }
     let seen = 0
+    /** Every file this directory holds right now, cap aside: the pruning key below. */
+    const held = new Set<string>()
     for (const entry of entries) {
-      if (seen >= MAX_FILES_PER_DIR) break
       if (!entry.isFile() || !entry.name.endsWith(FILE_SUFFIX)) continue
+      held.add(entry.name)
+      if (seen >= MAX_FILES_PER_DIR) continue
       seen += 1
       const path = join(dir, entry.name)
       let stats: ReturnType<typeof statSync>
@@ -300,6 +333,15 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
       files.set(path, { signal, tasks })
       prune(tasks, now)
     }
+    // A file this directory no longer holds is gone — cleared by its producer,
+    // rotated away, or renamed. Its folded record has to go with it: keeping it
+    // would serve a task whose file nobody can read, and the protocol promises
+    // that deleting the file deletes the task. `held` is built from the whole
+    // listing rather than from the files actually read, so the read cap can
+    // never look like a deletion.
+    for (const path of [...files.keys()]) {
+      if (dirname(path) === dir && !held.has(basename(path))) files.delete(path)
+    }
   }
 
   const prune = (tasks: Map<string, ProgressTask>, now: number): void => {
@@ -318,6 +360,58 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
       scanDir(dir, tracked, now)
     }
     enforceBudget()
+  }
+
+  /**
+   * A task as it should be read, once the job registry has been consulted.
+   *
+   * The fold never invents an ending: what the file says is what the file says.
+   * This is the *reading*, and it exists because a producer can be killed
+   * between two lines — on Windows by `taskkill`, which runs no user code, so
+   * the terminal event is not late, it is never coming. The registry holds the
+   * one fact that settles it: how the writing job ended.
+   *
+   * Three things move, and each is deliberate:
+   *
+   * - the **state**, from the job's outcome (`killed` reads as `cancelled`,
+   *   `failed` as `failed`, a clean exit as `done`);
+   * - **`updatedAt`**, to the job's finish, because that is when the reader
+   *   learned the ending: the retention window then starts there instead of at
+   *   a last report that may be hours old, and the row's duration becomes the
+   *   run's real duration;
+   * - **`ended`**, the marker that says this state was inferred, so nobody
+   *   mistakes it for the producer's own last word.
+   *
+   * A percentage is never invented for a killed or failed run — the bar stops
+   * where the producer left it. A `done` with no reported percentage fills the
+   * bar, exactly as the fold does for a producer that says `done` itself.
+   * @param task - one folded task.
+   * @param source - the job registry reader, or null to read the file alone.
+   * @returns the row to publish; the task itself when nothing proves it ended.
+   */
+  const settle = (task: ProgressTask, source: SessionJobSource | null): ProgressTask => {
+    if (task.state !== 'running' || source === null) return task
+    let found: readonly JobView[] | undefined
+    try {
+      found = source.jobsFor(task.sessionId)
+    } catch {
+      // A registry that cannot answer is no reason to change what the file
+      // says: the row keeps its reported state and the next read asks again.
+      return task
+    }
+    const settlement = settleTask(task, found)
+    if (settlement === null) return task
+    const { job, outcome, state } = settlement
+    const ended: TaskEnding = job.detail === undefined
+      ? { job: job.id, status: outcome }
+      : { job: job.id, status: outcome, detail: job.detail }
+    return {
+      ...task,
+      state,
+      pct: state === 'done' && task.pct === null ? 100 : task.pct,
+      updatedAt: Math.max(task.updatedAt, job.finishedAt ?? task.updatedAt),
+      ended,
+    }
   }
 
   /** Running work first, then the most recently touched, then by id — a total order. */
@@ -360,6 +454,10 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
    * and messages — the fence is the instance's login, not a session. A caller
    * that names no session gets an empty document, which is exactly what a
    * session with nothing to report gets.
+   *
+   * Every row is settled before it is published (see {@link settle}): a task
+   * whose writer's job has ended is answered as ended, because the alternative
+   * is a row that says `running` for the rest of the process's life.
    * @param now - current clock, epoch milliseconds.
    * @param sessionId - the session to answer for; absent answers for none.
    * @returns the session's tasks, ranked the way the panel reads them.
@@ -370,8 +468,9 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
       for (const record of files.values()) {
         for (const task of record.tasks.values()) {
           if (task.sessionId !== sessionId) continue
-          if (isTerminal(task.state) && now - task.updatedAt > config.retainMs) continue
-          all.push(task)
+          const row = settle(task, jobs)
+          if (isTerminal(row.state) && now - row.updatedAt > config.retainMs) continue
+          all.push(row)
         }
       }
     }
@@ -402,6 +501,9 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
     },
     reconfigure: (next: TaskProgressConfig) => {
       config = { ...next }
+    },
+    setJobSource: (source: SessionJobSource | null) => {
+      jobs = source
     },
     periodMs: () => config.scanMs,
     scan,

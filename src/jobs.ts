@@ -7,6 +7,11 @@
  * draws and the reminder the model gets can never disagree about what counts as
  * "already reported".
  *
+ * The same projections answer a second question, and it is the reason this
+ * module grew: a task whose writer's job has **ended** while the file still says
+ * `running`. See {@link settlingJob} — the ending a killed producer never got to
+ * write.
+ *
  * Neither shape carries a job's *output*: `ctx.jobs.read()` is a
  * single-consumer cursor that belongs to the model's `job_output` tool, and this
  * plugin has no business consuming it. Only lifecycle facts cross this module.
@@ -64,6 +69,115 @@ export function jobIsLive(job: JobView): boolean {
  */
 export function jobCanReport(job: JobView): boolean {
   return job.kind !== NON_REPORTING_KIND
+}
+
+/** How a job's record says it ended. */
+export type JobOutcome = 'completed' | 'killed' | 'failed'
+
+/**
+ * The job's terminal status, or null while it is live (or unknown).
+ *
+ * Spelled here rather than compared to string literals at each call site,
+ * because two halves and three readings depend on agreeing about it: a job that
+ * ended is what the settle below turns into a task's ending.
+ * @param job - one job projection.
+ * @returns the outcome, or null for a job that is still live.
+ */
+export function jobOutcome(job: JobView): JobOutcome | null {
+  const status = job.status
+  return status === 'completed' || status === 'killed' || status === 'failed' ? status : null
+}
+
+/**
+ * The task state a job's outcome is read as.
+ *
+ * A job that exited on its own leaves work that finished; a killed one leaves
+ * work that was stopped; a failed one leaves work that broke. Nothing here
+ * consults the producer: it never got to speak.
+ * @param outcome - the job's terminal status.
+ * @returns the state the task is read as.
+ */
+export function settledState(outcome: JobOutcome): 'done' | 'failed' | 'cancelled' {
+  if (outcome === 'failed') return 'failed'
+  if (outcome === 'killed') return 'cancelled'
+  return 'done'
+}
+
+/** The two task facts the settle reads: what it is called, and when it last spoke. */
+export interface SettleCandidate {
+  /** Task id, which is also the file's base name. */
+  readonly task: string
+  /** Epoch ms of the task's last event. */
+  readonly updatedAt: number
+}
+
+/** What the registry proves about a task whose writer is gone. */
+export interface JobSettlement {
+  /** The job that was writing the task. */
+  readonly job: JobView
+  /** How it ended. */
+  readonly outcome: JobOutcome
+  /** The state the task is read as. */
+  readonly state: 'done' | 'failed' | 'cancelled'
+}
+
+/**
+ * What the job registry proves about a task that still says `running`.
+ *
+ * A producer that is killed forces the question this protocol used to leave
+ * open: a task's ending was written by the script, so a script that never
+ * reached its last line leaves a row that says `running` forever. `job_kill`
+ * terminates the process tree — measured on Windows, it runs no user code at
+ * all, so neither `finally` nor any handler gets to report anything. The
+ * terminal line is not "missing yet"; it is never coming.
+ *
+ * The registry does know: a job's record outlives its process and says how it
+ * ended. So a `running` task whose writer's job has ended is *settled* from that
+ * record — in the reading, never in the file, which stays exactly what the
+ * producer wrote.
+ *
+ * The rule is deliberately narrow, because a false settle would hide work the
+ * user is waiting on, which is the failure this plugin exists to prevent:
+ *
+ * 1. the job's label must name the task (the same heuristic the unreported-job
+ *    rows use, and the reason a task id worth reporting is one that appears in
+ *    the command line);
+ * 2. **no live job may name that task** — a second writer still running means
+ *    the row is not orphaned, whatever an earlier one did;
+ * 3. the job must have existed before the task's last event and ended after it,
+ *    so a job from an earlier run (or a later one) cannot claim this ending;
+ * 4. the job must publish a start and a finish. `finishedAt` is the registry
+ *    invariant's "a terminal status has a finish", so a record without one is
+ *    not evidence.
+ *
+ * @param task - the task as the file folded it.
+ * @param jobs - this session's job projections, terminal ones included.
+ * @returns the settlement, or null when nothing proves the writer is gone.
+ */
+export function settleTask(
+  task: SettleCandidate,
+  jobs: readonly JobView[] | undefined,
+): JobSettlement | null {
+  if (jobs === undefined) return null
+  const named = jobs.filter(job => jobCanReport(job) && labelNamesTask(job.label, task.task))
+  if (named.length === 0) return null
+  if (named.some(jobIsLive)) return null
+  let best: JobView | null = null
+  let bestOutcome: JobOutcome | null = null
+  for (const job of named) {
+    const outcome = jobOutcome(job)
+    const startedAt = job.startedAt
+    const finishedAt = job.finishedAt
+    if (outcome === null || typeof startedAt !== 'number' || typeof finishedAt !== 'number') continue
+    if (startedAt > task.updatedAt || finishedAt < task.updatedAt) continue
+    // Two runs of the same task id: the latest ending is the one that closes it.
+    if (best === null || finishedAt > (best.finishedAt ?? 0)) {
+      best = job
+      bestOutcome = outcome
+    }
+  }
+  if (best === null || bestOutcome === null) return null
+  return { job: best, outcome: bestOutcome, state: settledState(bestOutcome) }
 }
 
 /**

@@ -36,15 +36,27 @@ import {
 import { registerStateRoute, type ConnectionLike, type WebServerLike } from './routes.ts'
 import { registerProgressSettings, type SettingsProviderLike } from './settings.ts'
 import { registerProgressEnv, type ShellEnvLike } from './shell-env.ts'
-import { createTaskStore, type TaskStore } from './store.ts'
+import { createTaskStore, type SessionJobSource, type TaskStore } from './store.ts'
 import { registerProgressPrompt, type SystemPromptLike } from './system-prompt.ts'
+
+/**
+ * The slice of the agent registry the settle needs.
+ *
+ * One method: the live agent that owns a session, which is the key the job
+ * registry is written in. `jobs.list(caller)` answers for one owner, and a
+ * progress directory names a session, so this is the bridge between the two.
+ */
+export interface AgentsLike {
+  /** The live agent for a session id, or undefined when that session is gone. */
+  get(sessionId: string): unknown
+}
 
 export { CONFIG_DEFAULTS, readConfig, type TaskProgressConfig } from './config.ts'
 export {
   SETTINGS_NAMESPACE, progressSchema, registerProgressSettings, resolveProgressSettings,
   type ProgressSettings, type SchemaLike, type SchemaNodeLike, type SettingsProviderLike, type SettingsScopeLike,
 } from './settings.ts'
-export { createTaskStore, type StoreStats, type TaskStore } from './store.ts'
+export { createTaskStore, type SessionJobSource, type StoreStats, type TaskStore } from './store.ts'
 export { PROGRESS_CLI_KEY, PROGRESS_DIR_KEY, registerProgressEnv, type ShellEnvLike } from './shell-env.ts'
 export {
   PROMPT_ORDER_NAME, PROMPT_SECTION_NAME, progressPromptText, registerProgressPrompt, type SystemPromptLike,
@@ -84,6 +96,7 @@ export interface TaskProgressHostContext {
       readonly settings: SettingsProviderLike
       readonly systemPrompt: SystemPromptLike
       readonly jobs: JobsLike
+      readonly agents: AgentsLike
     }) => void,
   ): void
   /**
@@ -193,5 +206,24 @@ export function apply(ctx: TaskProgressHostContext, rawConfig?: unknown): void {
       () => registerProgressReminder(withJobs, withJobs.jobs, store, () => liveConfig.remindAfterMs),
       'task-progress: unreported-job reminder',
     )
+  })
+
+  // The same registry answers the question a file cannot: what happened to the
+  // process writing a task that still says `running`. Both services are needed —
+  // the registry is keyed by the agent that owns a job, and the store holds only
+  // a session id — so a composition with one and not the other keeps the
+  // pre-settle behaviour rather than a half-wired one: the row reports what the
+  // file says, for as long as the file says it.
+  ctx.inject(['jobs', 'agents'], (withJobs) => {
+    const source: SessionJobSource = {
+      jobsFor: (sessionId: string) => {
+        const agent = withJobs.agents.get(sessionId)
+        return agent === undefined ? undefined : withJobs.jobs.list(agent)
+      },
+    }
+    withJobs.effect(() => {
+      store.setJobSource(source)
+      return () => { store.setJobSource(null) }
+    }, 'task-progress: job settle source')
   })
 }

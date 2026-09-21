@@ -58,7 +58,28 @@ Where the file goes:
 
 Examples:
   node "$env:DSH_PROGRESS_CLI" emit --task build --pct 10 --msg "linking"
-  node "$DSH_PROGRESS_CLI" done --task build --msg "shipped"
+  node "$env:DSH_PROGRESS_CLI" done --task build --msg "shipped"
+
+Emitting an ending around a long command:
+
+  $id = 'sync-catalog'; $cli = $env:DSH_PROGRESS_CLI; $settled = $false
+  try {
+    & python sync_catalog.py --task $id | ForEach-Object { node $cli emit --task $id --msg $_ }
+    # A native command's non-zero exit does NOT throw in PowerShell: check it, or
+    # a failed run gets reported as done.
+    if ($LASTEXITCODE -ne 0) { throw "exit code $LASTEXITCODE" }
+    node $cli done --task $id --msg "shipped"; $settled = $true
+  } catch {
+    node $cli fail --task $id --msg $_.Exception.Message; $settled = $true
+  } finally {
+    # Covers exceptions and Ctrl+C. It does NOT cover a kill: job_kill terminates
+    # the process tree, and on Windows that runs no user code at all, so this line
+    # never happens. The panel settles such a task from DSH's job record instead
+    # ("When the writer dies" in docs/PROTOCOL.md) — which is why the task id has
+    # to appear in the command line you launched, and why one task id should have
+    # exactly one writer.
+    if (-not $settled) { node $cli cancel --task $id --msg "stopped" }
+  }
 
 Emitted line (append-only; last value of each field wins):
   {"v":1,"task":"build","state":"running","pct":10,"msg":"linking","at":1730000000000}

@@ -220,6 +220,16 @@ const CSS = `
   white-space: nowrap;
 }
 
+/* A row whose ending came from the job registry rather than from the script.
+   Muted when the process exited on its own — an ordinary finish the producer
+   simply did not get to write down — and in the attention colour when it was
+   killed or broke, because then the row ends somewhere the producer never
+   agreed to. */
+.dtp-ended { color: var(--dsw-alias-label-tertiary, #8b8b95); }
+
+.dtp-ended[data-state='cancelled'],
+.dtp-ended[data-state='failed'] { color: var(--dsw-alias-state-warn-primary, #d29922); }
+
 .dtp-meta {
   display: flex;
   flex-wrap: wrap;

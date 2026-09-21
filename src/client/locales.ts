@@ -44,6 +44,11 @@ export const zh = {
   'meta.stalled': '已 {time} 无更新',
   'meta.session': '会话 {id}',
   'meta.source': '来自 {task}',
+  // The state above these lines came from the job registry, not from the
+  // script: it was killed (or exited) before it could write its own ending.
+  'ended.completed': '进程已退出，未上报终态（{job}）',
+  'ended.killed': '进程已被终止，未上报终态（{job}）',
+  'ended.failed': '进程已失败退出，未上报终态（{job}）',
   'recent.title': '最近消息',
   'settings.title': '任务进度设置',
   'settings.description': '长任务的扫描、上报与保留策略。留空并保存即可恢复默认值。',
@@ -109,6 +114,9 @@ export const en: Record<keyof typeof zh, string> = {
   'meta.stalled': 'no update for {time}',
   'meta.session': 'session {id}',
   'meta.source': 'from {task}',
+  'ended.completed': 'process exited without reporting an ending ({job})',
+  'ended.killed': 'process was killed without reporting an ending ({job})',
+  'ended.failed': 'process failed without reporting an ending ({job})',
   'recent.title': 'Recent messages',
   'settings.title': 'Task progress settings',
   'settings.description': 'How long-task progress is scanned, polled, and retained. Clear a field and save to restore its default.',

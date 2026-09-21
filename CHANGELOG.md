@@ -11,6 +11,34 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ### Fixed
 
+- **A task whose writer was killed no longer says `running` forever.** A task's
+  ending had exactly one author: the script. Killing a background job terminates
+  the process tree, and on Windows that is `taskkill`, which runs no user code —
+  so the `finally` block never runs and the terminal event is not late, it is
+  never coming. Measured rather than assumed: a background `pwsh` job whose
+  `finally` appends to a file, killed with `job_kill`, wrote nothing after the
+  kill. The Host half now reads the one record that outlives the process — DSH's
+  job registry — and publishes a `running` task whose writing job has ended as
+  ended: `killed` reads as cancelled, `failed` as failed, a clean exit as done.
+  The row carries an `ended` marker and says so underneath (*process was killed
+  without reporting an ending*), so an inference is never passed off as a
+  report, and the percentage stays where the producer left it: a killed run never
+  reported a completion. The progress file is untouched — a script that resumes
+  and appends `running` again supersedes the inference by itself.
+  The rule is narrow on purpose, because a wrong settle would *hide* work the
+  user is waiting on: the job's label must name the task, **no live job may name
+  that task** (a second writer still running means the row is not orphaned), the
+  job must have spanned the task's last event, and it must publish both a start
+  and a finish. Where the composition has no job registry — both `ctx.jobs` and
+  `ctx.agents` are optional injections — nothing is inferred and the file is
+  again the whole truth.
+- **Deleting a progress file deletes its row, as documented.** The scan walked
+  the directory's *current* entries and never reconciled them against the files
+  it already held, so a cleared or rotated-away file kept its folded task: the
+  row went on reporting a file that was no longer there, and
+  `dsh-progress clear --task x` left a phantom. The listing is now read whole
+  (the per-directory read cap only bounds what is re-folded, so a cap can never
+  look like a deletion) and records whose file is gone are dropped.
 - **The settings card now looks like the cards it sits among.** Every other row
   in the plugin configuration section is a raised card with a visible hairline, a
   16px corner, a 15px name over a 13px description, and controls on the house
@@ -46,6 +74,23 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ### Added
 
+- `docs/PROTOCOL.md` gains **When the writer dies**: the measured behaviour of a
+  force kill, the `ended` field and its mapping from the registry's statuses, the
+  four conditions the inference requires, and what it deliberately leaves alone.
+  The producer rules now state the three things that this makes load-bearing: the
+  task id must appear in the command line the job was launched with, one task id
+  should have exactly one writer, and the ending should still be written — it
+  covers exceptions and Ctrl+C, it is simply no longer the only thing that ends
+  a row.
+- The bundled CLI's `--help` carries the same correction, including the trap its
+  own example used to walk into: a native command's non-zero exit does **not**
+  throw in PowerShell, so a `catch`-only script reports a failed run as `done`
+  unless it checks `$LASTEXITCODE`.
+- `test/jobs.test.ts`, `test/store.test.ts`, `test/host.test.ts`, and
+  `test/protocol.test.ts` cover the inference from the rule's edges up to the
+  route `apply()` serves. Two mutations confirmed the tests bite: dropping the
+  live-job veto fails exactly the two tests written for it, and dropping the
+  "spanned the task" bound fails exactly the one.
 - `test/settings-chrome.test.ts`: the card's chrome, pinned to the values of the
   components it copies. It is the one part of this plugin whose correctness lives
   in another repository, and it can neither be imported nor read from a test, so

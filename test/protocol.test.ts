@@ -96,6 +96,33 @@ test('parseState round-trips a document and drops unusable rows', () => {
   assert.equal(state.pollMs, 500)
 })
 
+test('parseState keeps an inferred ending, and refuses a baseless one', () => {
+  // `ended` is the only field a producer never writes: the Host adds it when the
+  // job registry proves the writer is gone. A reader that kept a marker without
+  // a job or a known outcome would let a row claim an inference nobody made.
+  const state = parseState(JSON.stringify({
+    v: 1,
+    tasks: [
+      { task: 'killed', state: 'cancelled', sessionId: 's1', ended: { job: 'pwsh-7', status: 'killed', detail: 'signal: SIGTERM' } },
+      { task: 'clean', state: 'done', sessionId: 's1', ended: { job: 'pwsh-8', status: 'completed' } },
+      { task: 'no-job', state: 'cancelled', sessionId: 's1', ended: { status: 'killed' } },
+      { task: 'no-status', state: 'cancelled', sessionId: 's1', ended: { job: 'pwsh-9' } },
+      { task: 'bad-status', state: 'cancelled', sessionId: 's1', ended: { job: 'pwsh-9', status: 'stopping' } },
+      { task: 'not-an-object', state: 'cancelled', sessionId: 's1', ended: 'killed' },
+    ],
+  }))
+  assert.ok(state)
+  const byTask = new Map(state.tasks.map(task => [task.task, task]))
+  assert.deepEqual(byTask.get('killed')?.ended, { job: 'pwsh-7', status: 'killed', detail: 'signal: SIGTERM' })
+  assert.deepEqual(byTask.get('clean')?.ended, { job: 'pwsh-8', status: 'completed' })
+  assert.equal(byTask.get('no-job')?.ended, undefined)
+  assert.equal(byTask.get('no-status')?.ended, undefined)
+  assert.equal(byTask.get('bad-status')?.ended, undefined)
+  assert.equal(byTask.get('not-an-object')?.ended, undefined)
+  // The state survives regardless: the marker explains a state, it does not carry it.
+  assert.equal(byTask.get('no-job')?.state, 'cancelled')
+})
+
 test('parseState refuses anything it cannot trust', () => {
   for (const body of ['', 'nope', '[]', '{"tasks":"x"}', 'null']) {
     assert.equal(parseState(body), null, `expected null for ${JSON.stringify(body)}`)

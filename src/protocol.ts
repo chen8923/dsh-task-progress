@@ -83,13 +83,29 @@ export interface ProgressEvent {
   readonly unit?: string
 }
 
+/** How a task's writer was found to have ended, when it never said so itself. */
+export interface TaskEnding {
+  /** Registry id of the job that was writing the task. */
+  readonly job: string
+  /** How that job ended. */
+  readonly status: 'completed' | 'killed' | 'failed'
+  /** The job's own detail line, when it published one (`exit code: 3`). */
+  readonly detail?: string
+}
+
 /** One task as the browser receives it. */
 export interface ProgressTask {
   /** Session that reported it, taken from the directory name. */
   readonly sessionId: string
   /** Task id. */
   readonly task: string
-  /** Current state. */
+  /**
+   * Current state.
+   *
+   * Normally the producer's own last word. When {@link ProgressTask.ended} is
+   * present it instead comes from the job registry — the producer was killed
+   * before it could say anything, and the reading says what the record proves.
+   */
   readonly state: TaskState
   /** Percentage, or null when the producer never reported one. */
   readonly pct: number | null
@@ -107,6 +123,16 @@ export interface ProgressTask {
   readonly updatedAt: number
   /** Most recent distinct messages, oldest first. */
   readonly recent: readonly string[]
+  /**
+   * Present exactly when the state above was **inferred** rather than reported:
+   * the job writing this task ended, and the producer never wrote an ending.
+   *
+   * The distinction is the point of the field. A reader that only sees a
+   * terminal `state` cannot tell a script that finished from one that was
+   * killed mid-sentence, and the panel says so out loud rather than passing the
+   * inference off as the producer's own report.
+   */
+  readonly ended?: TaskEnding
 }
 
 /** The whole state document. */
@@ -243,6 +269,7 @@ function parseTask(raw: unknown): ProgressTask | null {
   const recent = Array.isArray(record['recent'])
     ? record['recent'].filter((line): line is string => typeof line === 'string').slice(-WIRE_HISTORY)
     : []
+  const ended = parseEnding(record['ended'])
   return {
     sessionId: typeof record['sessionId'] === 'string' ? record['sessionId'] : '',
     task,
@@ -255,5 +282,24 @@ function parseTask(raw: unknown): ProgressTask | null {
     startedAt: nonNegative(record['startedAt']) ?? 0,
     updatedAt: nonNegative(record['updatedAt']) ?? 0,
     recent,
+    ...ended === null ? {} : { ended },
   }
+}
+
+/**
+ * Parse the inferred-ending marker, dropping anything that does not name a job
+ * and a known outcome: a marker without evidence would make the panel claim an
+ * inference it cannot justify.
+ * @param raw - the `ended` field as received.
+ * @returns the ending, or null when it is absent or unusable.
+ */
+function parseEnding(raw: unknown): TaskEnding | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const record = raw as Record<string, unknown>
+  const job = record['job']
+  const status = record['status']
+  if (typeof job !== 'string' || job.length === 0) return null
+  if (status !== 'completed' && status !== 'killed' && status !== 'failed') return null
+  const detail = typeof record['detail'] === 'string' ? normalizeMessage(record['detail']) : ''
+  return detail.length > 0 ? { job, status, detail } : { job, status }
 }

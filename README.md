@@ -163,6 +163,38 @@ implying a bar that does not exist.
 A job in a session you are not looking at stays invisible, because every surface
 here is scoped to the session in view.
 
+### When the script is killed
+
+A task's ending is normally written by the script, which is a problem the moment
+something kills the script: `job_kill` terminates the process tree, and on
+Windows that is `taskkill`, which runs **no user code at all**. A `finally` block
+does not run, no handler runs, and the terminal line is not late — it is never
+coming. Measured, not assumed: a background `pwsh` job with a `finally` that
+appends to a file, killed with `job_kill`, wrote nothing after the kill.
+
+So the ending does not depend on the script getting there. The Host half asks
+DSH's job registry, whose record outlives the process and says how it ended, and
+a task still saying `running` whose **writing job has ended** is published as
+ended: `killed` reads as cancelled, `failed` as failed, a clean exit as done. The
+row says so underneath — *process was killed without reporting an ending* — so an
+inference is never passed off as a report, and the file itself is left exactly as
+the producer wrote it.
+
+Three things make that inference land, and they are worth knowing when you write
+the script:
+
+- **Name the task after something in the command line.** The row is matched to
+  the job by the same label heuristic the unreported-job rows use, so
+  `--task sync-catalog` inside the command line is recognised and a task named
+  `job1` in a command that never says `job1` is not.
+- **One writer per task id**, or one id per stage. Three jobs appending to one
+  file is not a task with three writers; it is a task whose ending two of them
+  cannot write.
+- **Write the ending anyway.** `try/finally` still covers exceptions, Ctrl+C, and
+  the ordinary path, and the ending carries the real outcome and message. It is
+  the *only* thing that covers a machine that dies, so it is worth having — it is
+  simply not the only thing that ends a row.
+
 ## Settings
 
 The plugin registers one settings namespace, so its knobs are editable where
@@ -211,10 +243,19 @@ alongside anything else.
 **Snapshots are not output.** The same registry also offers `list()`, whose
 snapshots carry lifecycle facts only — id, kind, the command label, timestamps,
 and how the job ended. Observing those is a different act from consuming the
-output cursor, and it is what lets this plugin do two things it otherwise could
-not: draw a row for a job nobody reported for, and tell the model once, at the
-step where it can still act, that a long job is running unseen. Two consumers of
-the same cursor would be a bug; two observers of a snapshot are not.
+output cursor, and it is what lets this plugin do three things it otherwise could
+not: draw a row for a job nobody reported for, tell the model once, at the step
+where it can still act, that a long job is running unseen, and settle a task
+whose writer was killed before it could report an ending. Two consumers of the
+same cursor would be a bug; two observers of a snapshot are not.
+
+**The registry is read, never written to.** A settled ending changes what the
+Host half *publishes* for a task and nothing else: the progress file keeps the
+producer's last words, so a script that resumes and appends `running` again
+supersedes the inference by itself, and deleting the file still deletes the task.
+That is the whole reason the fix belongs in the reading rather than in a
+correction written back to the file — a reader that rewrites its input cannot be
+reasoned about.
 
 **Why polling instead of push.** The data is a couple of kilobytes of JSON on
 localhost, and a poll loop is the one design that cannot desynchronize: every
@@ -250,7 +291,7 @@ rehydrate a schema envelope at all.
 ## Development
 
 ```bash
-npm test          # 88 tests, one process (works in restricted sandboxes)
+npm test          # 139 tests, one process (works in restricted sandboxes)
 npm run test:runner   # the same suite through node --test
 npm run build         # requires tsdown
 ```
@@ -263,9 +304,10 @@ src/host/              settings namespace, store, shell-environment contributor,
 src/client/            polling store, formatting, settings form, React components, slots, styles
 bin/dsh-progress.mjs   the dependency-free producer CLI
 docs/PROTOCOL.md       the file contract and every configuration key
-test/                  twelve suites: protocol, store, formatting, host wiring,
-                       settings, settings form, prompt section, session hook,
-                       client store, CLI, bundle, release
+test/                  sixteen suites: protocol, job reconciliation, store,
+                       formatting, host wiring, settings, settings form, prompt
+                       section, session hook, client store, CLI, bundle, settings
+                       chrome, privacy, release
 tools/                 test entry and the build/pack/install script
 ```
 
@@ -294,7 +336,7 @@ pull requests, which is where automation belongs.
 ### Releasing
 
 ```bash
-npm test                                  # 88 checks, one process
+npm test                                  # 139 checks, one process
 git push && git tag v0.1.1 && git push origin v0.1.1   # CI publishes it, with provenance
 npm publish                               # manual fallback: builds first, then publishes
 ```

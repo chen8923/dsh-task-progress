@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { CONFIG_DEFAULTS, readConfig } from '../src/host/config.ts'
 import { createTaskStore } from '../src/host/store.ts'
+import type { JobView } from '../src/jobs.ts'
 
 /** A store over a throwaway workspace, plus the paths a test writes to. */
 function fixture(config = {}) {
@@ -156,6 +157,28 @@ test('terminal tasks age out; running ones never do', () => {
     f.store.scan(1000 + 1001 + 1000)
     const tasks = f.store.snapshot(3001, f.sessionId).tasks
     assert.deepEqual(tasks.map(task => task.task), ['live'])
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('a vanished file stops being served, which is what "clear" relies on', () => {
+  // The protocol says deleting the file deletes the task. It used to be a lie:
+  // the scan walked the directory's *current* entries and never reconciled them
+  // against the files it already held, so `dsh-progress clear --task x` left a
+  // row reporting a file that was no longer there — for as long as the directory
+  // stayed tracked.
+  const f = fixture()
+  try {
+    f.write('build', [{ task: 'build', pct: 10, at: 1 }])
+    f.write('other', [{ task: 'other', pct: 20, at: 1 }])
+    f.store.scan(1)
+    assert.deepEqual(f.store.snapshot(1, f.sessionId).tasks.map(task => task.task).sort(), ['build', 'other'])
+
+    rmSync(f.file('build'))
+    f.store.scan(2)
+    assert.deepEqual(f.store.snapshot(2, f.sessionId).tasks.map(task => task.task), ['other'])
+    assert.equal(f.store.stats().files, 1, 'the record went with the file')
   } finally {
     f.cleanup()
   }
@@ -362,5 +385,135 @@ test('a full directory table evicts the least recently used session, never the n
     assert.deepEqual(store.snapshot(2, 'session-0').tasks, [])
   } finally {
     rmSync(root, { recursive: true, force: true })
+  }
+})
+
+/** A job row, as the registry projects one. */
+const job = (over: Partial<JobView> = {}): JobView => ({
+  id: 'pwsh-7',
+  kind: 'pwsh',
+  label: 'pwsh -File sync_catalog.ps1 --task sync-catalog',
+  status: 'killed',
+  startedAt: 1_000,
+  finishedAt: 9_000,
+  ...over,
+})
+
+/** A store over one running task whose writer was a background job. */
+function settled(config = {}, jobs: readonly JobView[] | undefined = [job()]) {
+  const f = fixture(config)
+  f.write('sync-catalog', [
+    { v: 1, task: 'sync-catalog', state: 'running', pct: 40, msg: 'chunk 4', at: 5_000 },
+  ])
+  f.store.scan(5_000)
+  if (jobs !== undefined) f.store.setJobSource({ jobsFor: () => jobs })
+  return f
+}
+
+test('a task whose writer was killed is published as cancelled, and says why', () => {
+  const f = settled()
+  try {
+    const [task] = f.store.snapshot(9_000, f.sessionId).tasks
+    assert.equal(task?.state, 'cancelled', 'the row must not claim to be running after its writer died')
+    assert.deepEqual(task?.ended, { job: 'pwsh-7', status: 'killed' })
+    // The percentage is what the producer last said: a killed run never reported
+    // a completion, so inventing 100% here would be worse than showing 40%.
+    assert.equal(task?.pct, 40)
+    // The ending is when the reader learned it, so the retention window and the
+    // row's duration both start from the run that actually happened.
+    assert.equal(task?.updatedAt, 9_000)
+    assert.equal(task?.msg, 'chunk 4', 'the producer last message survives')
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('a clean exit reads as done, with the registry detail carried through', () => {
+  const f = settled({}, [job({ status: 'completed', finishedAt: 9_000, detail: 'exit code: 0' })])
+  try {
+    const [task] = f.store.snapshot(9_000, f.sessionId).tasks
+    assert.equal(task?.state, 'done')
+    assert.deepEqual(task?.ended, { job: 'pwsh-7', status: 'completed', detail: 'exit code: 0' })
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('a clean exit with no reported percentage fills the bar', () => {
+  const f = fixture()
+  try {
+    f.write('sync-catalog', [{ v: 1, task: 'sync-catalog', state: 'running', at: 5_000 }])
+    f.store.scan(5_000)
+    f.store.setJobSource({ jobsFor: () => [job({ status: 'completed' })] })
+    assert.equal(f.store.snapshot(9_000, f.sessionId).tasks[0]?.pct, 100)
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('the settle reads the file, and never rewrites it', () => {
+  const f = settled()
+  try {
+    assert.equal(f.store.snapshot(9_000, f.sessionId).tasks[0]?.state, 'cancelled')
+    // Take the registry away and the same file reports what it always said: the
+    // inference belonged to the reading, not to the producer's record.
+    f.store.setJobSource(null)
+    assert.equal(f.store.snapshot(9_000, f.sessionId).tasks[0]?.state, 'running')
+    assert.equal(f.store.snapshot(9_000, f.sessionId).tasks[0]?.ended, undefined)
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('without a registry reader the file is the whole truth', () => {
+  const f = fixture()
+  try {
+    f.write('sync-catalog', [{ v: 1, task: 'sync-catalog', state: 'running', at: 5_000 }])
+    f.store.scan(5_000)
+    assert.equal(f.store.snapshot(9_000, f.sessionId).tasks[0]?.state, 'running')
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('a live writer keeps its row, whatever an earlier job did', () => {
+  const f = settled({}, [job(), job({ id: 'pwsh-8', status: 'running', label: 'pwsh -File sync_catalog.ps1 --task sync-catalog', startedAt: 6_000, finishedAt: undefined })])
+  try {
+    assert.equal(f.store.snapshot(9_000, f.sessionId).tasks[0]?.state, 'running')
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('a registry that cannot answer leaves the row as the file reported it', () => {
+  const f = fixture()
+  try {
+    f.write('sync-catalog', [{ v: 1, task: 'sync-catalog', state: 'running', at: 5_000 }])
+    f.store.scan(5_000)
+    f.store.setJobSource({
+      jobsFor: () => {
+        throw new Error('registry gone')
+      },
+    })
+    assert.equal(f.store.snapshot(9_000, f.sessionId).tasks[0]?.state, 'running')
+  } finally {
+    f.cleanup()
+  }
+})
+
+test('the retention window starts at the ending, not at the last report', () => {
+  // A script that reported once and then worked for hours: its last report is
+  // older than the retention window, so measuring retention from the report
+  // would drop the row at the exact moment it became worth reading.
+  const f = settled({ retainMs: 60_000 })
+  try {
+    assert.deepEqual(f.store.snapshot(9_000, f.sessionId).tasks.map(task => task.task), ['sync-catalog'])
+    assert.deepEqual(
+      f.store.snapshot(9_000 + 60_001, f.sessionId).tasks,
+      [],
+      'and it ages out one window after the ending',
+    )
+  } finally {
+    f.cleanup()
   }
 })

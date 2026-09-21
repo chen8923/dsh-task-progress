@@ -123,6 +123,77 @@ test('the state route answers only GET and HEAD', async () => {
   }
 })
 
+test('apply() settles a killed writer over the route it serves', async () => {
+  // The whole point of the seam: the fake context below is a composition with a
+  // job registry, and the job that wrote `build` was killed. The file still says
+  // `running` — that is the failure this covers — so the row must come back
+  // ended, with the reason attached, *without* the file changing.
+  const f = fixtureRoot()
+  const registered: { handler: (req: never, res: never) => void }[] = []
+  const context = {
+    effect: (callback: () => void | (() => void)) => { callback() },
+    webServer: {
+      register: (route: { handler: (req: never, res: never) => void }) => {
+        registered.push(route)
+        return () => {}
+      },
+    },
+    connection: { requestRejection: () => undefined },
+    shellEnv: { register: () => () => {} },
+    // The settings scope is how the extra root reaches the store; the fake
+    // answers with one that points at this test's workspace.
+    settings: {
+      register: (_ns: string, schema: (value: unknown) => unknown) => ({
+        get: () => schema({ roots: [f.root] }),
+        watch: () => () => {},
+        update: async () => {},
+        replace: async () => {},
+      }),
+    },
+    // Keyed by the session the progress directory is named after.
+    agents: { get: (sessionId: string) => sessionId === 'session-1' ? { id: sessionId } : undefined },
+    jobs: {
+      list: (agent: { id: string }) => agent.id === 'session-1'
+        ? [{
+            id: 'pwsh-7',
+            kind: 'pwsh',
+            label: 'pwsh -File build.ps1 --task build',
+            status: 'killed',
+            startedAt: Date.now() - 60_000,
+            finishedAt: Date.now(),
+            detail: 'signal: SIGTERM',
+          }]
+        : [],
+    },
+    on: () => () => {},
+  }
+  // The host half picks its optional services up through `ctx.inject`, so the
+  // fake context runs that callback the way cordis does: only once every named
+  // service exists. A composition that is missing one wires less, not differently.
+  const withInject = context as typeof context & {
+    inject: (deps: readonly string[], callback: (scope: typeof context) => void) => void
+  }
+  withInject.inject = (deps, callback) => {
+    if (deps.every(dep => (context as Record<string, unknown>)[dep] !== undefined)) callback(context)
+  }
+  apply(withInject as never, { scanMs: 60_000, roots: [f.root] })
+  const handler = registered[0]?.handler
+  assert.ok(handler, 'apply() registered no route')
+  const http = await serve(handler as never)
+  try {
+    const body = await (await fetch(`${http.url}?session=session-1`)).json() as {
+      tasks: { task: string, state: string, pct: number, ended?: { job: string, status: string, detail?: string } }[]
+    }
+    assert.equal(body.tasks[0]?.task, 'build')
+    assert.equal(body.tasks[0]?.state, 'cancelled')
+    assert.equal(body.tasks[0]?.pct, 30, 'the percentage the producer last reported is untouched')
+    assert.deepEqual(body.tasks[0]?.ended, { job: 'pwsh-7', status: 'killed', detail: 'signal: SIGTERM' })
+  } finally {
+    await http.close()
+    f.cleanup()
+  }
+})
+
 test('the environment contributor hands out a per-session directory', () => {
   const root = mkdtempSync(join(tmpdir(), 'dtp-env-'))
   const registered: { resolve: (execution: unknown) => Record<string, string>, variables: Record<string, unknown> }[] = []
@@ -230,7 +301,9 @@ test('apply() wires the route, the environment, the settings namespace, and the 
   const withInject = context as typeof context & {
     inject: (deps: readonly string[], callback: (scope: typeof context) => void) => void
   }
-  withInject.inject = (deps, callback) => { callback(context) }
+  withInject.inject = (deps, callback) => {
+    if (deps.every(dep => (context as Record<string, unknown>)[dep] !== undefined)) callback(context)
+  }
   apply(withInject as never, { scanMs: 60_000 })
   assert.deepEqual(routes.map(route => ({ kind: route.kind, path: route.path })), [{ kind: 'exact', path: STATE_ROUTE }])
   assert.deepEqual(registered, [SETTINGS_NAMESPACE])

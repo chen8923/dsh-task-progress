@@ -53,6 +53,13 @@ sends that one thing.
 | `unit` | string | Unit name, e.g. `files`, `frames`, `epochs`. |
 | `at` | number | Producer clock in epoch milliseconds. Falls back to the file's mtime. |
 
+The task rows a reader receives carry one more field, added to the wire for
+inferred endings and never written by a producer:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `ended` | object | Present only when the state was inferred from the job registry: `{job, status, detail?}` — the job that was writing, how it ended (`completed` \| `killed` \| `failed`), and its own detail line when it published one. See *When the writer dies*. |
+
 ### Rules that matter
 
 - **Append, never rewrite.** One `>>` / `Add-Content` / `appendFile` per event.
@@ -61,11 +68,25 @@ sends that one thing.
   with an alphanumeric. Anything else is ignored by the reader.
 - **A terminal state ends the run.** Appending `running` after `done` starts a new
   run: the clock and the percentage reset, while the recent-message history stays.
+- **An ending is not only the producer's to write.** A script can be killed
+  between two lines, and then no user code runs at all (see *When the writer
+  dies*). Write the ending — it carries the real outcome and message — but do not
+  rely on it being the only thing that ends the row.
+- **Name the task after something in the command line.** The reader matches a
+  task to the background job running it by looking for the task id inside the
+  job's label, which for a shell job is the command. A task id that appears
+  nowhere in the command is invisible to that match, and its row will keep
+  reporting whatever the file last said.
+- **One writer per task id.** Two jobs appending to one file is not a task with
+  two writers: it is a task whose ending two of them cannot write, and whose
+  percentage is whichever one appended last.
 - **`done` with no percentage fills the bar** (100%).
 - **Junk is tolerated.** Blank lines, banner text, a half-flushed tail, a UTF-8
   BOM on the first line — all dropped or skipped, never fatal.
 - **Deleting the file deletes the task.** The Host half forgets it on the next
-  scan.
+  scan — including when the scan was already past its read cap for that
+  directory, because the listing is read whole and the cap only bounds the files
+  actually re-folded.
 - **Keep the file small.** The reader takes the last 256 KiB; older lines are
   ignored. Progress files are logs, not archives — point real logs elsewhere.
 
@@ -98,6 +119,63 @@ tab. Finished tasks stay visible for `retainMs` (30 minutes by default), then
 age out. `maxTasks` bounds both the document and the Host's in-memory task set,
 so a producer that mints a new task id on every line cannot grow the process
 without bound.
+
+## When the writer dies
+
+A task's ending used to have exactly one author: the script. That is a hole, not
+a design, because the script is the thing that gets killed.
+
+`job_kill` terminates the process tree. On Windows that is `taskkill`, which runs
+**no user code**: a `finally` block does not run, no handler runs, and the
+terminal event is not late — it is never coming. Measured rather than assumed: a
+background `pwsh` job whose `finally` appends to a file, killed with `job_kill`,
+wrote nothing after the kill. So a producer cannot be the only thing that ends a
+row, however carefully its script is written.
+
+The registry knows, because a job's record outlives its process:
+
+```
+{"task":"sync-catalog","state":"cancelled","pct":40,"updatedAt":1730000009000,
+ "ended":{"job":"pwsh-7","status":"killed","detail":"signal: SIGTERM"}}
+```
+
+`ended` is the one field no producer writes. It appears exactly when the state
+beside it was **inferred rather than reported**: the job writing the task had
+ended while the file still said `running`. The mapping is total —
+
+| job status | published state |
+| --- | --- |
+| `completed` | `done` (with `pct: 100` when the producer never reported one) |
+| `killed` | `cancelled` |
+| `failed` | `failed` |
+
+— and three things move with it: the state, `updatedAt` (set to the job's finish,
+so the retention window starts when the reader learned the ending and the row's
+duration is the run's real duration), and the `ended` marker. The percentage is
+whatever the producer last reported: a killed run never reported a completion,
+and inventing 100% for it would be worse than showing where it stopped. The file
+is not touched. The Host half reads the ending, it does not write one: the record
+stays exactly what the producer wrote, so a later run that appends `running`
+again supersedes the inference on its own.
+
+The inference is deliberately narrow, because a wrong one would *hide* work the
+user is waiting on — the failure this whole plugin exists to prevent:
+
+1. the job's label must name the task (the same match the unreported-job rows
+   use, which is why a task id worth reporting is one that appears in the command
+   line);
+2. **no live job may name that task** — a second writer still running means the
+   row is not orphaned, whatever an earlier job did;
+3. the job must have started before the task's last event and ended after it, so
+   a job from an earlier run cannot claim this ending;
+4. the job must publish both a start and a finish, which the registry's own
+   invariant pairs with a terminal status.
+
+A task nothing proves dead is left alone: a row that keeps saying `running` is
+the honest answer to "nobody knows", and the panel's own *no update for …* marker
+(60 s of silence) says the rest. Where the composition has no job registry — the
+plugin uses `ctx.jobs` and `ctx.agents` through optional injection — nothing is
+inferred at all, and the file is again the whole truth.
 
 ## Configuration
 
