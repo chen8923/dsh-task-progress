@@ -165,6 +165,7 @@ test('apply() wires the route, the environment, the settings namespace, and the 
   let contributors = 0
   const registered: string[] = []
   const sections: string[] = []
+  const listeners: string[] = []
   let watched = 0
   const context = {
     effect: (callback: () => void | (() => void)) => {
@@ -211,6 +212,18 @@ test('apply() wires the route, the environment, the settings namespace, and the 
       },
       getSectionOrder: () => 1600,
     },
+    // The job registry is read as snapshots only; `read` deliberately is not
+    // part of the fake, because the plugin is not allowed to call it.
+    jobs: {
+      list: () => [],
+    },
+    on: (event: string) => {
+      listeners.push(event)
+      return () => {
+        const index = listeners.indexOf(event)
+        if (index >= 0) listeners.splice(index, 1)
+      }
+    },
   }
   // The host half picks its optional services up through `ctx.inject`, so the
   // fake context runs that callback immediately for whichever dep was asked for.
@@ -224,11 +237,13 @@ test('apply() wires the route, the environment, the settings namespace, and the 
   assert.deepEqual(sections, [PROMPT_SECTION_NAME])
   assert.equal(watched, 1)
   assert.equal(contributors, 1)
-  // Five effects: settings changes, environment, route, scan loop, prompt
-  // section. Disposing them unregisters everything.
+  assert.deepEqual(listeners, ['agent/pre-step'], 'the reminder listens to the step it can still influence')
+  // Six effects: settings changes, environment, route, scan loop, prompt
+  // section, and the reminder. Disposing them unregisters everything.
   for (const dispose of disposers) dispose()
   assert.deepEqual(routes, [])
   assert.deepEqual(sections, [])
   assert.equal(contributors, 0)
   assert.equal(watched, 0)
+  assert.deepEqual(listeners, [])
 })

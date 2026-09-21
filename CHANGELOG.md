@@ -29,10 +29,45 @@ The version here, in `package.json`, and in both READMEs is checked by
   path that keeps working after npm retires direct publishing for bypass-2FA
   tokens in January 2027.
 - **Dependabot** for the two dev dependencies, the lockfile, and the workflows.
+- **Every background job gets a row, whether or not a script reports for it.**
+  A job that ran for fifteen minutes with nothing reported used to show *nothing*
+  at all — the floating pill disappeared, and an absent pill reads as "no work is
+  running", which is the one thing it did not mean. The browser half now draws
+  DSH's own per-session job mirror (command label, state, elapsed time, exit
+  detail) for jobs no reported task accounts for, and the pill stays up in a
+  warning colour while that is the only live work. Nothing about it is invented:
+  with no script reporting there is no percentage, and the group says so.
+- **A reminder that reaches the model at the decision, not in the abstract.** A
+  system-prompt section states the convention once, among hundreds of lines, at a
+  moment when no decision is being made; in practice it was skipped, and a session
+  that never reported had no way to notice. The Host half now observes the job
+  registry's **non-consuming snapshots** (`ctx.jobs.list`) before each model step
+  and appends **one** notice when a job has run past `remindAfterMs` (default 30 s)
+  with nothing reported for it — phrased to forbid the one destructive reading it
+  could invite ("do not restart a job that is already running"). It delegates
+  first, never vetoes, speaks once per job, forgets ids that are no longer live,
+  and swallows its own failures so a broken reminder can never break a step.
+  `remindAfterMs: 0` disables it, in the plugin row's config or in settings.
+- `src/jobs.ts`: the one place the two job projections are reconciled, shared by
+  the Host's reminder and the browser's rows, so the row drawn and the notice sent
+  can never disagree about which jobs are already reported for.
+
+### Changed
+
+- **The prompt section is an instruction now.** It said long tasks *can* report
+  progress — a capability note — and never mentioned background jobs, which is
+  where long work actually goes. It now says what to do, when, and what the user
+  sees if it is skipped.
 
 ### Fixed
 
 - Both READMEs claimed 38 tests and 69 checks. The suite has 88.
+- Both READMEs stated that a background job with no reporting is invisible here.
+  That was the bug, not the contract; both now describe the two kinds of row.
+- The settings schema did not cover `remindAfterMs`, so a settings layer would
+  have dropped a value the plugin row had configured. It is a schema field now,
+  resolved and clamped like the rest, and the Host reads the live value so turning
+  the reminder off takes effect on the next step.
 
 ## [0.1.0] — 2026-09-20
 

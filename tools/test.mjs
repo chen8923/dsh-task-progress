@@ -10,12 +10,14 @@
  */
 
 import '../test/protocol.test.ts'
+import '../test/jobs.test.ts'
 import '../test/store.test.ts'
 import '../test/format.test.ts'
 import '../test/host.test.ts'
 import '../test/settings.test.ts'
 import '../test/settings-form.test.ts'
 import '../test/system-prompt.test.ts'
+import '../test/reminder.test.ts'
 import '../test/session-hook.test.ts'
 import '../test/client-store.test.ts'
 import '../test/cli.test.ts'

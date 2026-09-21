@@ -31,6 +31,11 @@ export interface TaskProgressConfig {
   readonly maxFileBytes: number
   /** Extra absolute roots to discover progress directories under. */
   readonly roots: readonly string[]
+  /**
+   * How long a background job may run with nothing reported before the model is
+   * told once about it, milliseconds. `0` disables the reminder entirely.
+   */
+  readonly remindAfterMs: number
 }
 
 /** The configuration every deployment gets when it configures nothing. */
@@ -43,6 +48,7 @@ export const CONFIG_DEFAULTS: TaskProgressConfig = {
   maxTasks: 200,
   maxFileBytes: 256 * 1024,
   roots: [],
+  remindAfterMs: 30_000,
 }
 
 /** Directory names that are a single safe path segment. */
@@ -76,5 +82,7 @@ export function readConfig(raw: unknown): TaskProgressConfig {
     maxTasks: bounded(record['maxTasks'], CONFIG_DEFAULTS.maxTasks, 1, 2000),
     maxFileBytes: bounded(record['maxFileBytes'], CONFIG_DEFAULTS.maxFileBytes, 4096, 8 * 1024 * 1024),
     roots: roots.slice(0, 32),
+    // Zero is a real value here: it is how a deployment turns the reminder off.
+    remindAfterMs: bounded(record['remindAfterMs'], CONFIG_DEFAULTS.remindAfterMs, 0, 3_600_000),
   }
 }

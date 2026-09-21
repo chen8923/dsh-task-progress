@@ -1,7 +1,7 @@
 /**
  * Host half of `dsh-task-progress`.
  *
- * Four seams, each with exactly one job:
+ * Five seams, each with exactly one job:
  *
  * 1. {@link registerProgressSettings} registers the settings namespace whose
  *    knobs the browser's configuration card edits, with this plugin row's own
@@ -11,11 +11,16 @@
  * 3. {@link createTaskStore} folds whatever lands in those directories.
  * 4. {@link registerStateRoute} serves the folded state to the Web UI behind the
  *    composition's authentication fence.
+ * 5. {@link registerProgressReminder} tells the *model* about a background job
+ *    that has run past the threshold with nothing reported, at the step where it
+ *    can still act on that. It reads registry **snapshots** (`list()`), which DSH
+ *    documents as non-consuming.
  *
- * The plugin never touches the background-job registry, and in particular never
- * reads a job's output: that cursor is single-consumer and belongs to the
- * model's `job_output` tool. Progress here is something the *script* chooses to
- * report, which is what makes this plugin safe to install next to anything else.
+ * The plugin never reads a background job's **output**: `ctx.jobs.read()`
+ * consumes a single-consumer cursor that belongs to the model's `job_output`
+ * tool. Observing lifecycle snapshots is a different thing from reading output,
+ * and it is what makes this plugin able to say something without editing the
+ * user's `AGENTS.md`.
  *
  * @module dsh-task-progress/host
  */
@@ -24,6 +29,10 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { STATE_ROUTE } from '../protocol.ts'
 import { readConfig, type TaskProgressConfig } from './config.ts'
+import {
+  DEFAULT_REMIND_AFTER_MS, registerProgressReminder,
+  type JobsLike, type PreStepDecisionLike, type PreStepPayload,
+} from './reminder.ts'
 import { registerStateRoute, type ConnectionLike, type WebServerLike } from './routes.ts'
 import { registerProgressSettings, type SettingsProviderLike } from './settings.ts'
 import { registerProgressEnv, type ShellEnvLike } from './shell-env.ts'
@@ -40,6 +49,10 @@ export { PROGRESS_CLI_KEY, PROGRESS_DIR_KEY, registerProgressEnv, type ShellEnvL
 export {
   PROMPT_ORDER_NAME, PROMPT_SECTION_NAME, progressPromptText, registerProgressPrompt, type SystemPromptLike,
 } from './system-prompt.ts'
+export {
+  DEFAULT_REMIND_AFTER_MS, createReminderMessage, dueForReminder, registerProgressReminder, reminderText,
+  type AgentLoopLike, type JobsLike, type PreStepDecisionLike, type PreStepPayload, type ReportedSource,
+} from './reminder.ts'
 export { registerStateRoute, stateHandler, type ConnectionLike, type WebServerLike } from './routes.ts'
 
 /** Cordis function-plugin name. */
@@ -70,8 +83,17 @@ export interface TaskProgressHostContext {
     callback: (scope: TaskProgressHostContext & {
       readonly settings: SettingsProviderLike
       readonly systemPrompt: SystemPromptLike
+      readonly jobs: JobsLike
     }) => void,
   ): void
+  /**
+   * Cordis event registration. The agent loop dispatches its waterfalls on this
+   * bus, so a host composition's plugin sees every agent's steps.
+   */
+  on(
+    event: string,
+    listener: (payload: PreStepPayload, next: () => Promise<PreStepDecisionLike>) => unknown,
+  ): () => void
   readonly webServer: WebServerLike
   readonly connection: ConnectionLike
   readonly shellEnv: ShellEnvLike
@@ -100,7 +122,12 @@ function resolveCliPath(): string | null {
  * @param rawConfig - this plugin row's configuration, of unknown shape; it becomes the settings base layer.
  */
 export function apply(ctx: TaskProgressHostContext, rawConfig?: unknown): void {
-  const store: TaskStore = createTaskStore(readConfig(rawConfig))
+  const config = readConfig(rawConfig)
+  // The live configuration: settings changes replace it, and the reminder below
+  // reads through it so turning the reminder off takes effect on the next step
+  // rather than at the next restart.
+  let liveConfig = config
+  const store: TaskStore = createTaskStore(config)
   // The composition's own working directory is always worth a look: it covers a
   // deployment whose sessions were created before this plugin was installed.
   store.addRoot(process.cwd())
@@ -139,6 +166,7 @@ export function apply(ctx: TaskProgressHostContext, rawConfig?: unknown): void {
   ctx.inject(['settings'], (withSettings) => {
     const scope = registerProgressSettings(withSettings.settings, rawConfig)
     const applySettings = (next: TaskProgressConfig): void => {
+      liveConfig = next
       store.reconfigure(next)
       store.setRoots(next.roots)
       store.scan()
@@ -153,5 +181,17 @@ export function apply(ctx: TaskProgressHostContext, rawConfig?: unknown): void {
   // feature anyone can use out of the box.
   ctx.inject(['systemPrompt'], (withPrompt) => {
     withPrompt.effect(() => registerProgressPrompt(withPrompt.systemPrompt), 'task-progress: prompt section')
+  })
+
+  // The job registry is optional too. Where it exists, a background job that has
+  // been silent past `remindAfterMs` earns one notice in the model's next step —
+  // the convention stated where the decision is, rather than where the prompt
+  // happens to mention it. Where it does not exist, nothing is registered and
+  // the plugin is exactly what it was before: files in, panels out.
+  ctx.inject(['jobs'], (withJobs) => {
+    withJobs.effect(
+      () => registerProgressReminder(withJobs, withJobs.jobs, store, () => liveConfig.remindAfterMs),
+      'task-progress: unreported-job reminder',
+    )
   })
 }

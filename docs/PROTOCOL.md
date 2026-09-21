@@ -117,6 +117,7 @@ row's `config` and then to the default below.
 | `maxTasks` | `200` | Cap on tasks in one document. |
 | `maxFileBytes` | `262144` | Tail read from one progress file. |
 | `roots` | `[]` | Extra absolute roots to discover directories under. |
+| `remindAfterMs` | `30000` | How long a background job may run with nothing reported before the Host tells the model **once** about it. Not a producer setting and not shown in the panel: it costs one short notice in that session's context, so `0` (off) is a legitimate value. |
 
 A settings change is live. The Host half re-points its store, re-reads the extra
 roots, and picks up a new scan interval on its next tick; the state document's

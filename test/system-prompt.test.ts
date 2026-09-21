@@ -60,7 +60,22 @@ test('the text carries every fact a producer needs, and the one it must not do',
   assert.match(text, /running\/done\/failed\/cancelled/)
   // When it is worth doing, and that the file is not the model's to read.
   assert.match(text, /30 seconds/)
-  assert.match(text, /Do not read the progress file back/)
+  assert.match(text, /Never read the progress file back/)
+})
+
+test('the text instructs rather than describes, and names the failure it prevents', () => {
+  const text = progressPromptText()
+  // The first version said long tasks *can* report progress. A capability note
+  // competes with everything else in the prompt and was skipped in practice; an
+  // instruction attached to the decision is what actually changes behaviour.
+  assert.match(text, /For any command you expect to run longer/, 'the trigger is a directive')
+  assert.doesNotMatch(text, / can report /, 'a capability note is not an instruction')
+  // Background jobs are where long work actually goes, and they were missing.
+  assert.match(text, /background job/)
+  // The consequence is what makes the instruction worth following.
+  assert.match(text, /empty progress panel/)
+  // The name is how the panel and the reminder recognise a job that reports.
+  assert.match(text, /name the task after something recognisable/)
 })
 
 test('the text stays short enough to pay for in every session', () => {

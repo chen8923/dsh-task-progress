@@ -31,6 +31,7 @@ test('resolution clamps out-of-range and mistyped values', () => {
     maxTasks: 0,
     maxFileBytes: -5,
     retainMs: 10 ** 12,
+    remindAfterMs: -1,
   })
   assert.equal(resolved.dirName, CONFIG_DEFAULTS.dirName)
   assert.equal(resolved.scanMs, 250)
@@ -39,6 +40,7 @@ test('resolution clamps out-of-range and mistyped values', () => {
   assert.equal(resolved.maxTasks, 1)
   assert.equal(resolved.maxFileBytes, 4096)
   assert.equal(resolved.retainMs, 24 * 3_600_000)
+  assert.equal(resolved.remindAfterMs, 0, 'zero is a real setting: it turns the reminder off')
 })
 
 test('roots are trimmed, deduplicated, typed, and capped', () => {
@@ -61,6 +63,7 @@ test('a valid section survives resolution unchanged', () => {
     maxTasks: 10,
     maxFileBytes: 8192,
     roots: ['C:/work'],
+    remindAfterMs: 45_000,
   }
   assert.deepEqual(resolveProgressSettings(section), section)
 })
@@ -79,7 +82,7 @@ test('the schema is callable, serializable, and structurally walkable', () => {
   const rootNode = refs[String(json.uid)]
   assert.equal(rootNode?.type, 'object')
   assert.deepEqual(Object.keys(rootNode?.dict ?? {}).sort(), [
-    'dirName', 'historyLimit', 'maxFileBytes', 'maxTasks', 'pollMs', 'retainMs', 'roots', 'scanMs',
+    'dirName', 'historyLimit', 'maxFileBytes', 'maxTasks', 'pollMs', 'remindAfterMs', 'retainMs', 'roots', 'scanMs',
   ])
   // Every node carries its meta object and every reference resolves to a node
   // that exists — the two things a partial envelope gets wrong.

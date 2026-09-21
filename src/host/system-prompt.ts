@@ -27,19 +27,31 @@ const PROMPT_ORDER_FALLBACK = 1600
 /**
  * The convention, in as few words as it can be stated.
  *
- * It names both paths the environment offers (append a line yourself, or call
- * the bundled CLI), because which one is cheaper depends on the language the
- * script is written in, and it closes the one failure the model would otherwise
- * cause: reading the file back, which is the human's view and not the model's.
+ * Three things are load-bearing here, and each was learned from a session where
+ * nothing appeared on the panel:
+ *
+ * - It is **imperative**. The first version said long tasks *can* report, which
+ *   reads as a capability note and was skipped; the model needs an instruction
+ *   attached to the decision, not a description of a feature.
+ * - It names **background jobs**. That is where long work actually goes, and the
+ *   first version never mentioned them.
+ * - It names the **consequence**. "The user gets an empty panel" is what makes
+ *   the instruction worth following rather than merely true.
+ *
+ * It stays short because every session pays for it, and it closes the one
+ * failure the model would otherwise cause: reading the file back, which is the
+ * human's view and not the model's.
  * @returns the prompt text.
  */
 export function progressPromptText(): string {
-  return 'Long tasks can report live progress to the user: for a command you expect to run longer than about 30 seconds, '
-    + 'have the script append one JSON event per update to `$DSH_PROGRESS_DIR/<task>.jsonl` '
-    + '(`{"v":1,"task":"build","state":"running","pct":40,"msg":"linking"}`; `state` is running/done/failed/cancelled, '
-    + '`done`/`total`/`unit` are optional counters), or run '
+  return 'For any command you expect to run longer than about 30 seconds — including a background job — report '
+    + 'live progress to the user: append one JSON event per update to `$DSH_PROGRESS_DIR/<task>.jsonl` '
+    + '(`{"v":1,"task":"build","state":"running","pct":40,"msg":"linking"}`; states are running/done/failed/cancelled, '
+    + '`done`/`total`/`unit` optional), or run '
     + '`node "$DSH_PROGRESS_CLI" emit --task build --pct 40 --msg "linking"` (also `done`, `fail`, `list`). '
-    + 'Both variables are set inside every shell call. Do not read the progress file back — it is the human\'s view.'
+    + 'Both variables exist in every shell call, and name the task after something recognisable in the command. '
+    + 'A long command that reports nothing leaves the user staring at an empty progress panel. '
+    + 'Never read the progress file back — it is the human\'s view.'
 }
 
 /** The slice of `ctx.systemPrompt` this plugin uses. */

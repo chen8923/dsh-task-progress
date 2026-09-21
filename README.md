@@ -76,8 +76,9 @@ commits to, and a mismatch between it and the code is itself a security report.
 | **Shell environment** | Every shell call gains `DSH_PROGRESS_DIR` and `DSH_PROGRESS_CLI`. |
 | **Network** | None. No outbound request, no telemetry, no update check, no child process. |
 | **HTTP** | One route, `GET`/`HEAD /plugins/task-progress/state`, fenced by DSH's own `connection.requestRejection` before it reads anything, answering for exactly one session at a time, with no filesystem path in the response. |
-| **Model context** | One **static** system-prompt section, beside DSH's background-job guidance. |
-| **Tools** | **None.** The tool catalogue is untouched — so, unlike most plugins, this one does not push new tool descriptions into the cached prefix, and nothing it does at runtime changes the prompt. It costs the cache one short section, once. |
+| **Job mirror** | The browser half draws DSH's own per-session job mirror — the same rows the session header lists: command label, state, elapsed time, exit detail. Client-side only; none of it travels over this plugin's route. |
+| **Model context** | One **static** system-prompt section, beside DSH's background-job guidance. At most **one** extra notice per background job, and only for a job that has run past a threshold (default 30 s, `remindAfterMs`) with nothing reported for it; `0` turns it off. |
+| **Tools** | **None.** The tool catalogue is untouched — so, unlike most plugins, this one does not push new tool descriptions into the cached prefix. It costs the cache one short prompt section, once, plus the rare notice above. |
 | **UI** | One overlay entry, one right-sidebar tab, one settings card — additive keys in shared list slots. |
 | **Memory** | Bounded by configuration: `maxTasks` tasks per document, `messagesPerTask` messages per task, `fileTailBytes` per file, and a 64-directory LRU of known progress directories. |
 
@@ -149,11 +150,18 @@ Never read the progress file back — it is for the human.
 
 ### When nothing appears
 
-The panel shows what scripts report; it never reads a running job's output. A
-background job started by a script that does not report is therefore invisible
-here, and existing jobs cannot be retrofitted — but the sidebar tab says so
-instead of looking broken: with jobs live and nothing reported, its empty state
-names the count.
+The panel draws two kinds of row.
+
+A task a **script** reported arrives with its percentage, its counters and its
+messages. A background job nobody reported for still shows up: DSH already pushes
+a per-session job mirror for its own job list, and that mirror carries the command
+line, how long the job has run and how it ended — so the plugin draws those rows
+instead of showing nothing. What it will not do is invent detail: with no script
+reporting there is no percentage, and the group's own note says so rather than
+implying a bar that does not exist.
+
+A job in a session you are not looking at stays invisible, because every surface
+here is scoped to the session in view.
 
 ## Settings
 
@@ -178,6 +186,9 @@ document's `pollMs` follows the value the browser should use.
 
 `dirName` is deliberately absent from the panel — it is part of every path
 already written, so it stays a composition-level setting on the plugin row.
+`remindAfterMs` is in the settings schema but not in the panel either: it is one
+number with one sensible default, and `0` (the reminder off) is the only other
+value anybody wants.
 
 ## Design
 
@@ -187,7 +198,7 @@ producer nor the UI knows about the other, and neither knows about DSH internals
 | Layer | What it is | Why it is shaped that way |
 | --- | --- | --- |
 | **Protocol** (`docs/PROTOCOL.md`) | Append-only JSONL, one file per task | Any language, no IPC, no ports, no auth, survives restarts. Works with the plugin uninstalled — the files are just files. |
-| **Host half** | `ctx.shellEnv` contributor + directory poll + one HTTP route + a system-prompt section | Uses only public DSH seams (`webServer`, `connection`, `shellEnv`, `settings`, `systemPrompt`), and never touches the job registry. |
+| **Host half** | `ctx.shellEnv` contributor + directory poll + one HTTP route + a system-prompt section + one agent-step listener | Uses only public DSH seams (`webServer`, `connection`, `shellEnv`, `settings`, `systemPrompt`, `jobs`), and reads the job registry as **non-consuming snapshots** — never `read()`, which owns the output cursor. |
 | **Browser half** | One polling store, two panels (`shell.overlay` + a sidebar tab), and a settings card | The panels read the same snapshot and the card reads its own namespace scope, so adding or removing a surface never touches the data path. |
 
 **Why the plugin does not read job output.** `ctx.jobs.read()` consumes a
@@ -196,6 +207,14 @@ path reading it would silently steal bytes the model can then never see (DSH
 pins that as a tested invariant). Progress here is therefore something the
 *script* chooses to report, which is what makes this plugin safe to install
 alongside anything else.
+
+**Snapshots are not output.** The same registry also offers `list()`, whose
+snapshots carry lifecycle facts only — id, kind, the command label, timestamps,
+and how the job ended. Observing those is a different act from consuming the
+output cursor, and it is what lets this plugin do two things it otherwise could
+not: draw a row for a job nobody reported for, and tell the model once, at the
+step where it can still act, that a long job is running unseen. Two consumers of
+the same cursor would be a bug; two observers of a snapshot are not.
 
 **Why polling instead of push.** The data is a couple of kilobytes of JSON on
 localhost, and a poll loop is the one design that cannot desynchronize: every

@@ -13,10 +13,12 @@
  */
 
 import { useState, type ReactNode } from 'react'
+import { unreportedJobs } from '../jobs.ts'
 import type { ProgressState } from '../protocol.ts'
 import { countRunning, headlineTask, selectTasks } from './format.ts'
+import { JobGroup } from './JobList.tsx'
 import type { Translate } from './locales.ts'
-import { useCurrentSession, type SessionsHook } from './session-hook.ts'
+import { useCurrentSession, useSessionJobs, type SessionsHook } from './session-hook.ts'
 import { TaskRow } from './TaskList.tsx'
 import { useNow, useProgress } from './useProgress.ts'
 
@@ -40,12 +42,21 @@ export function ProgressOverlay({ t, useSessions }: ProgressOverlayProps): React
   const tick = (state?.tasks.length ?? 0) > 0
   const now = useNow(1000, tick)
   const tasks = selectTasks(state, current, now, 'active')
+  const jobs = unreportedJobs(useSessionJobs(useSessions, current), tasks.map(task => task.task))
 
-  if (tasks.length === 0) return null
+  // Nothing reported and nothing running: stay out of the way. A job that is
+  // running without reporting is *not* nothing — that is exactly the case this
+  // surface used to get wrong by disappearing.
+  if (tasks.length === 0 && jobs.length === 0) return null
 
   const running = countRunning(tasks)
   const headline = headlineTask(tasks)
-  const label = running === 1 ? t('overlay.activeOne') : t('overlay.active', { count: running })
+  const label = running > 0
+    ? (running === 1 ? t('overlay.activeOne') : t('overlay.active', { count: running }))
+    : jobs.length > 0
+      ? (jobs.length === 1 ? t('overlay.unreportedOne') : t('overlay.unreported', { count: jobs.length }))
+      : t('overlay.active', { count: 0 })
+  const warn = running === 0 && jobs.length > 0
 
   return (
     <div className="dtp-overlay">
@@ -67,23 +78,28 @@ export function ProgressOverlay({ t, useSessions }: ProgressOverlayProps): React
                 </svg>
               </button>
             </header>
-            <ul className="dtp-list">
-              {tasks.map(task => (
-                <TaskRow
-                  key={`${task.sessionId}:${task.task}`}
-                  task={task}
-                  t={t}
-                  now={now}
-                  showSession={current === undefined}
-                />
-              ))}
-            </ul>
+            <JobGroup jobs={jobs} t={t} now={now} />
+            {tasks.length > 0
+              ? (
+                <ul className="dtp-list">
+                  {tasks.map(task => (
+                    <TaskRow
+                      key={`${task.sessionId}:${task.task}`}
+                      task={task}
+                      t={t}
+                      now={now}
+                      showSession={current === undefined}
+                    />
+                  ))}
+                </ul>
+              )
+              : null}
           </section>
         )
         : (
           <button
             type="button"
-            className="dtp-pill"
+            className={warn ? 'dtp-pill dtp-pillWarn' : 'dtp-pill'}
             aria-expanded={false}
             aria-label={t('overlay.expand')}
             onClick={() => setOpen(true)}

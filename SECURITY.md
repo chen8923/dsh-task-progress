@@ -26,7 +26,9 @@ itself a security report.
 | **Shell environment** | Every shell call gets `DSH_PROGRESS_DIR` and `DSH_PROGRESS_CLI` added. |
 | **Network** | None. No outbound request, no telemetry, no update check, no child process. The browser half fetches one path on the same origin it was served from. |
 | **HTTP surface** | One route: `GET`/`HEAD /plugins/task-progress/state`. It calls `ctx.connection.requestRejection` **before** reading anything, answers for exactly one `?session=` at a time, and puts no filesystem path on the wire. Other methods get `405`. |
-| **Model context** | One static system-prompt section, placed beside DSH's background-job guidance. Nothing else is injected, and nothing it does at runtime changes the prompt. |
+| **Model context** | One **static** system-prompt section, placed beside DSH's background-job guidance. Plus at most **one** appended notice per background job, and only for a job that has run past `remindAfterMs` (default 30 s) with no reported task accounting for it. Nothing else is ever injected, and a notice repeats for no job. |
+| **Job snapshots** | `ctx.jobs.list(agent)` — documented as non-consuming snapshots: id, kind, label, lifecycle status, timestamps, owner session. It is read for the calling agent only, and only to decide whether a long job has gone unreported. `ctx.jobs.read()` is never called: that cursor is single-consumer and belongs to the model's `job_output` tool. No job output is read, stored, logged, or sent anywhere. |
+| **Browser job mirror** | The panels draw DSH's own per-session job mirror (the rows the session header lists) so a job with no reported progress still has a row: command label, state, elapsed time, exit detail. This is client-side state DSH already pushed to that browser; it never passes through this plugin's route or reaches the Host half. |
 | **Tools** | None. The plugin adds no tool, so the tool catalogue — and the cached prefix built from it — is untouched. |
 | **UI** | Three additive registrations: one `shell.overlay` entry, one right-sidebar tab, one settings card. Each adds its own key to a shared list slot; none replaces or claims another plugin's path, and each is skipped when the seam is absent. |
 | **Memory** | Bounded by configuration: at most `maxTasks` tasks per document, `messagesPerTask` messages per task, `fileTailBytes` read per file, and a 64-directory LRU of known progress directories. |
@@ -40,6 +42,10 @@ itself a security report.
   from a path a browser supplied.
 - A crash, or memory/CPU growth driven by attacker-controlled progress files
   (a huge line, a torn byte, a non-UTF-8 tail, a symlinked directory).
+- A notice injected into a model step when it should not have been — for a job
+  that *is* reporting, for a delegated agent, more than once for the same job, or
+  for a job shorter than the configured threshold. (Each notice is a small,
+  permanent addition to that session's context, so a runaway one is a real cost.)
 - Anything in the shell-environment or settings contribution that escapes the
   namespace it declares.
 

@@ -301,6 +301,61 @@ const CSS = `
   line-height: 16px;
 }
 
+/* ---- background jobs that report nothing ---- */
+
+.dtp-jobs {
+  border-bottom: 1px solid var(--dsw-alias-border-l2-darkmode-thin, rgba(128, 128, 128, 0.2));
+}
+
+.dtp-jobsHead {
+  padding: 8px 12px 4px;
+  color: var(--dsw-alias-state-warn-primary, #d29922);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dtp-job {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  list-style: none;
+}
+
+.dtp-jobLabel {
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary, #e8e8ea);
+  font-family: var(--dsw-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dtp-jobMeta {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary, #8b8b95);
+  font-size: 11px;
+}
+
+.dtp-jobState {
+  margin-left: 6px;
+  color: var(--dsw-alias-state-warn-primary, #d29922);
+}
+
+.dtp-jobsNote {
+  margin: 0;
+  padding: 0 12px 8px;
+  color: var(--dsw-alias-label-tertiary, #8b8b95);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+/* The pill when the only live work is unreported: same shape, warning colour,
+   because "nothing is running" and "something is running unseen" must not look
+   identical — telling those two apart is the whole point of the row group. */
+.dtp-pillWarn { color: var(--dsw-alias-state-warn-primary, #d29922); }
+
 /* ---- settings card, inside DSH's plugin configuration section ---- */
 
 .dtp-set {

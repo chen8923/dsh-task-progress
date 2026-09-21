@@ -10,10 +10,12 @@
  */
 
 import type { ReactNode } from 'react'
+import { unreportedJobs } from '../jobs.ts'
 import type { ProgressState } from '../protocol.ts'
 import { countRunning, formatClock, selectTasks } from './format.ts'
+import { JobGroup } from './JobList.tsx'
 import type { Translate } from './locales.ts'
-import { useRunningJobCount, type SessionsHook } from './session-hook.ts'
+import { useRunningJobCount, useSessionJobs, type SessionsHook } from './session-hook.ts'
 import { TaskRow } from './TaskList.tsx'
 import { useNow, useProgress } from './useProgress.ts'
 
@@ -59,14 +61,33 @@ function EmptyState({ t, unreportedJobs }: { readonly t: Translate, readonly unr
  */
 export function ProgressBody({ t, sessionId, useSessions }: ProgressBodyProps): ReactNode {
   const state: ProgressState | null = useProgress(sessionId)
-  const unreportedJobs = useRunningJobCount(useSessions, sessionId)
+  const unreportedCount = useRunningJobCount(useSessions, sessionId)
   const tick = (state?.tasks.length ?? 0) > 0
   const now = useNow(1000, tick)
   const tasks = selectTasks(state, sessionId, now, 'all')
+  // Coverage is judged against every task this session has reported, finished
+  // ones included: a job whose script reported and then exited was reported.
+  const jobs = unreportedJobs(useSessionJobs(useSessions, sessionId), tasks.map(task => task.task))
 
-  if (tasks.length === 0) return <EmptyState t={t} unreportedJobs={unreportedJobs} />
+  if (tasks.length === 0 && jobs.length === 0) return <EmptyState t={t} unreportedJobs={unreportedCount} />
 
   const running = countRunning(tasks)
+  const footer = state !== null
+    ? <footer className="dtp-bodyFoot">{t('tab.updated', { time: formatClock(state.generatedAt) })}</footer>
+    : null
+
+  // A session whose only live work is unreported has no task counts worth
+  // printing; drawing "0 running · 0 finished" next to real rows would be worse
+  // than drawing nothing.
+  if (tasks.length === 0) {
+    return (
+      <div className="dtp-body">
+        <JobGroup jobs={jobs} t={t} now={now} />
+        {footer}
+      </div>
+    )
+  }
+
   return (
     <div className="dtp-body">
       <header className="dtp-bodyHead">
@@ -75,14 +96,13 @@ export function ProgressBody({ t, sessionId, useSessions }: ProgressBodyProps): 
           {t('tab.counts', { running, finished: tasks.length - running })}
         </span>
       </header>
+      <JobGroup jobs={jobs} t={t} now={now} />
       <ul className="dtp-list">
         {tasks.map(task => (
           <TaskRow key={`${task.sessionId}:${task.task}`} task={task} t={t} now={now} />
         ))}
       </ul>
-      {state !== null
-        ? <footer className="dtp-bodyFoot">{t('tab.updated', { time: formatClock(state.generatedAt) })}</footer>
-        : null}
+      {footer}
     </div>
   )
 }
