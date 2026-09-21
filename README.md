@@ -279,6 +279,18 @@ no longer carries what the sources define. `prepublishOnly` still builds for
 `npm publish`. The suites run on Node 22.18+ (they execute the TypeScript sources
 directly through type stripping), while the plugin itself runs on Node 20+.
 
+**The bundler is pinned, and Dependabot is told to leave it alone.** `tsdown` and
+`typescript` are held at exact versions because a bundler release changes the
+bytes of the committed `lib/` — the build that ships to users and to git installs.
+A bump and a rebuild belong in one commit, and a bot can only open the first half
+of that, so `.github/dependabot.yml` ignores those two dependencies entirely. That
+includes their **security** pull requests: the option is documented as changing how
+Dependabot creates security updates too. What remains is the Dependabot **alert**
+on the Security tab, and that is the signal to act — bump, `npm run build`,
+confirm `test/bundle.test.ts` still passes, and commit `lib/` in the same commit.
+Everything else (the workflows' actions, the lockfile) still gets its automatic
+pull requests, which is where automation belongs.
+
 ### Releasing
 
 ```bash

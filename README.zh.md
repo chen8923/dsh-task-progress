@@ -196,6 +196,8 @@ test/                  十二套测试：协议、store、格式化、宿主接�
 tools/                 测试入口与构建/打包/安装脚本
 ```
 
+**构建工具链是钉住的，并且已经让 Dependabot 别碰它。** `tsdown` 与 `typescript` 固定为精确版本，因为 bundler 一升级，提交在仓库里的 `lib/` 字节就会变 —— 而 `lib/` 正是发给用户、也是 git 安装所取的那份构建产物。升级与重建必须落在同一个提交里，机器人只能完成前半步，所以 `.github/dependabot.yml` 把这两个依赖整个忽略掉。**这也包括它们的安全更新 PR**（官方文档写明：该选项同样改变安全更新 PR 的创建方式）。留下的信号是 Security 页上的 Dependabot **告警**，它就是动手的触发点：升版本 → `npm run build` → 确认 `test/bundle.test.ts` 仍通过 → 把重建的 `lib/` 放进同一个提交。其余部分（workflow 里的 actions、lockfile）照旧收自动 PR —— 自动化该用在这些地方。
+
 ### 发布
 
 ```bash
