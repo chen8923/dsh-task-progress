@@ -11,6 +11,16 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ### Added
 
+- **A real screenshot at the top of both READMEs**, replacing the ASCII mock-up
+  that used to stand in for one. A description of a progress bar and a picture of
+  one are not the same argument, and the mock-up had drifted: it showed two tasks
+  and numbers no capture would ever match. The shot is the floating panel from a
+  running session — one task reporting, with its bar, message, elapsed time, unit
+  counters and ETA — taken as-is, with a synthetic demo task reporting into it
+  (the panel cannot be photographed without something reporting to it). The
+  decorative skin layer in the session behind it was hidden for the shot so no
+  personal imagery ends up in a public repository. It ships in `docs/`, so the
+  relative link renders on the repository and the bytes are in the package.
 - **`dsh-progress run` — wrap the command and stop writing producers.** Setting a
   long task up used to cost a small program per task kind: probe the tool's
   output, write a script that parses it, discover that stderr needs merging, get

@@ -6,17 +6,10 @@ right-sidebar tab — no polling the agent, no waiting for the command to finish
 
 **Version 0.1.1** · MIT · [中文](README.zh.md) · [Changelog](CHANGELOG.md)
 
-```
-┌──────────────────────────────────────┐
-│ ⟳ 2 tasks running                    │   ← floating pill, appears only while
-└──────────────────────────────────────┘     something is running
-┌──────────────────────────────────────┐
-│ Long-task progress      2 running · 1│
-│ ██████████░░░░░░░░░░  52%  build     │   ← click the pill, or open the
-│ linking objects                      │     "Task progress" sidebar tab
-│ 12m04s elapsed · 5/9 files · ~11m left│
-└──────────────────────────────────────┘
-```
+![The floating panel over a running session: one task with its progress bar, message, elapsed time, unit counters and an ETA](docs/overlay.png)
+
+*A real session, not a mock-up: the floating panel with one task reporting.*
+*Click it to expand, or open the **Task progress** tab in the right sidebar.*
 
 ## Why this exists
 
