@@ -1,5 +1,5 @@
 /**
- * Nothing in this repository may name somebody's machine.
+ * Nothing that can be committed may name somebody's machine.
  *
  * This exists because the repository did name one: a planning note was added
  * under `docs/` (which ships to npm) describing the local checkouts, the profile
@@ -10,6 +10,12 @@
  * The scan walks the worktree rather than shelling out to git, so it runs in the
  * restricted sandboxes this suite is designed for — and so it also covers a file
  * that is about to be committed but is not tracked yet.
+ *
+ * `notes/` is skipped on purpose, and it is the one directory where local paths
+ * belong: it is ignored by git, so nothing there can reach the repository, and
+ * a handover note that cannot say where the checkout lives is not much of a
+ * handover. A file that is ignored cannot be committed without `-f`, which is a
+ * deliberate act rather than the accident this test guards against.
  *
  * @module dsh-task-progress/test/privacy
  */
@@ -22,8 +28,11 @@ import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 
-/** Directories that are not the repository's own content. */
-const SKIP_DIRS = new Set(['.git', 'node_modules', '.dsh-progress'])
+/**
+ * Directories that are not the repository's own content: dependency trees, VCS
+ * metadata, runtime state, and the local notes directory (see the module note).
+ */
+const SKIP_DIRS = new Set(['.git', 'node_modules', '.dsh-progress', 'notes'])
 
 /** Extensions that are archives or images rather than readable text. */
 const SKIP_EXT = new Set(['.tgz', '.gz', '.zip', '.png', '.jpg', '.jpeg', '.ico', '.woff', '.woff2'])
