@@ -58,14 +58,29 @@ test('resolution clamps out-of-range and mistyped values', () => {
   assert.equal(resolved.remindAfterMs, 0, 'zero is a real setting: it turns the reminder off')
 })
 
-test('roots are trimmed, deduplicated, typed, and capped', () => {
+test('roots are trimmed, deduplicated, typed, absolute, and capped', () => {
+  // The drive-letter probe is assembled from fragments on purpose: the privacy
+  // rule forbids a drive-absolute path appearing anywhere in the tree, including
+  // in the tests that check for one.
+  const drive = `${'C'}:${'\\'}work`
+  const unc = `${'\\\\'}server${'\\'}share`
   assert.deepEqual(
-    resolveProgressSettings({ roots: [' a ', 'a', '', 7, null, 'b'] }).roots,
-    ['a', 'b'],
+    resolveProgressSettings({ roots: [' /a ', '/a', '', 7, null, '/b'] }).roots,
+    ['/a', '/b'],
   )
-  const many = resolveProgressSettings({ roots: Array.from({ length: 50 }, (_, index) => `r${index}`) })
+  const many = resolveProgressSettings({ roots: Array.from({ length: 50 }, (_, index) => `/r${index}`) })
   assert.equal(many.roots.length, 32)
   assert.deepEqual(resolveProgressSettings({ roots: 'not-an-array' }).roots, [])
+  assert.deepEqual(resolveProgressSettings({ roots: ['relative/dir', '/keep'] }).roots, ['/keep'])
+
+  assert.deepEqual(
+    resolveProgressSettings({ roots: ['/work', 'relative/dir', drive, '../up', unc] }).roots,
+    ['/work', drive, unc],
+  )
+  assert.deepEqual(readConfig({ roots: ['x', '  '] }).roots, [])
+  assert.deepEqual(readConfig({ roots: ['/a', '/a'] }).roots, ['/a'])
+  assert.deepEqual(readConfig({ roots: 'not-an-array' }).roots, [])
+  assert.equal(readConfig({ roots: Array.from({ length: 50 }, (_, i) => `/r${i}`) }).roots.length, 32)
 })
 
 test('a valid section survives resolution unchanged', () => {

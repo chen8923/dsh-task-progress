@@ -26,7 +26,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -68,7 +68,10 @@ Start here — dsh-progress run --task <id> -- <command>
     node "$env:DSH_PROGRESS_CLI" run --task crack --pattern "Progress: (\\d+)%" -- hashcat -m 13000 hashes.txt
 
   --every MS     how often the output is re-read (default 1000)
-  --pattern RE   read the percentage from this regex instead (first capture group)
+  --pattern RE   read the percentage from this regex instead (first capture group).
+                 Matched against at most 1000 characters of a line, and a nested
+                 quantifier such as (a+)+ is refused rather than run: it can
+                 backtrack exponentially and hang the wrapped command.
   --quiet        do not relay the command's output to stdout
   --cwd DIR      working directory for the command
 
@@ -215,8 +218,94 @@ const RUN_PCT_RE = /(\d+(?:\.\d+)?)\s*%/
 /** A completed/total pair the command printed, e.g. `12/88`. */
 const RUN_PAIR_RE = /(\d+)\s*\/\s*(\d+)/
 
+/**
+ * Longest line a custom `--pattern` is ever applied to.
+ *
+ * A pattern that backtracks badly is only dangerous on a long input, so the
+ * input is what gets bounded: whatever the child prints, the regex sees at most
+ * this much of a line.
+ */
+const PATTERN_LINE_LIMIT = 1000
+
+/** Longest `--pattern` source accepted. */
+const PATTERN_SOURCE_LIMIT = 200
+
+/**
+ * Why a `--pattern` is refused, or null when it is usable.
+ *
+ * `run` applies the pattern to a child's output, and `--pattern` rides a command
+ * line the model writes — so a catastrophic-backtracking regex is reachable by
+ * accident as easily as by intent. `(a+)+$` is exponential in the input length:
+ * measured here, 20 characters takes 10 ms and 40 never finishes. That wedges
+ * the wrapped job's own process (it cannot reach the DSH host), which is still a
+ * hang the user gets no progress out of.
+ *
+ * The check is a scanner rather than a pattern over the pattern: it walks the
+ * source, keeps one frame per open group, and refuses a quantifier applied to a
+ * group that already repeats. That is the shape that is provably exponential;
+ * the input cap above bounds the rest.
+ * @param source - the `--pattern` string as typed.
+ * @returns a message naming the problem, or null.
+ */
+export function patternRejection(source) {
+  if (typeof source !== 'string' || source.length === 0) return 'it is empty'
+  if (source.length > PATTERN_SOURCE_LIMIT) return `it is longer than ${PATTERN_SOURCE_LIMIT} characters`
+  /** One frame per open group: whether that group already repeats. */
+  const open = []
+  /** What the previous atom was, so a quantifier knows what it applies to. */
+  let previous = 'start'
+  let escaped = false
+  let inClass = false
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index]
+    if (escaped) { escaped = false; previous = 'atom'; continue }
+    if (char === '\\') { escaped = true; continue }
+    if (inClass) { if (char === ']') inClass = false; continue }
+    if (char === '[') { inClass = true; previous = 'atom'; continue }
+    if (char === '(') { open.push({ repeats: false }); previous = 'start'; continue }
+    if (char === ')') {
+      const frame = open.pop()
+      previous = frame?.repeats === true ? 'repeatingGroup' : 'atom'
+      continue
+    }
+    const braced = char === '{' && /^\{\d+(,\d*)?\}/.test(source.slice(index))
+    if (char === '*' || char === '+' || char === '?' || braced) {
+      if (previous === 'repeatingGroup') return 'it repeats a group that already repeats (e.g. `(a+)+`), which can backtrack exponentially'
+      if (previous === 'quantifier') return 'it applies two quantifiers to one atom'
+      if (open.length > 0) open[open.length - 1].repeats = true
+      previous = 'quantifier'
+      if (braced) index = source.indexOf('}', index)
+      continue
+    }
+    previous = 'atom'
+  }
+  return null
+}
+
 /** What one look at the command's output says about progress. */
 const NO_SAMPLE = { pct: null, done: null, total: null, msg: '' }
+
+/**
+ * The regex a `--pattern` names, or why it will not be used.
+ *
+ * Separate from the command that consumes it, and exported, because the refusal
+ * is the half worth testing: `run` exits on a bad pattern, and a test cannot call
+ * `process.exit`. Splitting it lets the guard be exercised through the same path
+ * the CLI takes, rather than only as a unit.
+ * @param source - the `--pattern` value, or undefined when none was given.
+ * @returns the compiled pattern, or the reason it was refused.
+ */
+export function resolvePattern(source) {
+  if (typeof source !== 'string' || source.length === 0) return { pattern: null, error: null }
+  const rejection = patternRejection(source)
+  if (rejection !== null) return { pattern: null, error: rejection }
+  try {
+    return { pattern: new RegExp(source), error: null }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    return { pattern: null, error: `it is not a valid regular expression (${reason})` }
+  }
+}
 
 /** A bounded non-negative integer, or null. */
 const count = (value) => Number.isFinite(value) && value >= 0 ? Math.round(value) : null
@@ -246,7 +335,9 @@ export function parseProgress(chunk, pattern = null) {
   const search = pattern instanceof RegExp ? pattern : RUN_PCT_RE
   let pct = null
   for (let index = lines.length - 1; index >= 0 && pct === null; index -= 1) {
-    const match = search.exec(lines[index])
+    // Bounded before it is matched: see PATTERN_LINE_LIMIT.
+    const subject = lines[index].length > PATTERN_LINE_LIMIT ? lines[index].slice(0, PATTERN_LINE_LIMIT) : lines[index]
+    const match = search.exec(subject)
     const parsed = Number(match?.[1])
     // Passed through as printed: a tool that says 13.89% said something more
     // precise than 14, and the panel rounds for display anyway.
@@ -306,6 +397,15 @@ export async function runWrapped(options) {
   const relay = join(options.dir, `${options.task}.relay`)
 
   mkdirSync(options.dir, { recursive: true })
+  // `'w'` creates the relay fresh, so a run that was killed leaves bytes that
+  // cannot be read by the next one. The unlink is for the other thing `'w'` would
+  // do to an existing path: follow it. A planted `<task>.relay` symlink is removed
+  // rather than truncated through.
+  try {
+    unlinkSync(relay)
+  } catch {
+    // Nothing to remove is the normal case.
+  }
   const fd = openSync(relay, 'w')
   let child
   try {
@@ -333,13 +433,24 @@ export async function runWrapped(options) {
   let lastAt = Date.now()
 
   const look = () => {
+    // Only the bytes written since the last look are read. Reading the whole
+    // relay every tick is quadratic in the command's output — a chatty
+    // twenty-minute command would spend its own time re-reading itself.
     let text = ''
     try {
       const size = statSync(relay).size
       if (size <= offset) return
-      const buffer = readFileSync(relay)
-      text = buffer.subarray(offset).toString('utf8')
-      offset = size
+      const length = size - offset
+      const buffer = Buffer.alloc(length)
+      const fd = openSync(relay, 'r')
+      let read = 0
+      try {
+        read = readSync(fd, buffer, 0, length, offset)
+      } finally {
+        closeSync(fd)
+      }
+      text = buffer.subarray(0, read).toString('utf8')
+      offset += read
     } catch {
       return
     }
@@ -509,14 +620,9 @@ export async function run() {
     case 'run': {
       if (wrapped.length === 0) fail('run needs a command after `--`: dsh-progress run --task <id> -- <command> [args...]')
       const dir = directoryOf(options)
-      let pattern = null
-      if (typeof options.pattern === 'string' && options.pattern.length > 0) {
-        try {
-          pattern = new RegExp(options.pattern)
-        } catch (error) {
-          fail(`--pattern is not a valid regular expression: ${error instanceof Error ? error.message : String(error)}`)
-        }
-      }
+      const resolved = resolvePattern(options.pattern)
+      if (resolved.error !== null) fail(`--pattern is refused: ${resolved.error}`)
+      const pattern = resolved.pattern
       // The task id is checked before anything is spawned: a rejected id after a
       // twenty-minute command has already run is a bad way to learn it.
       fileOf(options)

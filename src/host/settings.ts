@@ -30,7 +30,7 @@
  */
 
 import { SETTINGS_NAMESPACE } from '../protocol.ts'
-import { CONFIG_DEFAULTS, readConfig, type TaskProgressConfig } from './config.ts'
+import { CONFIG_DEFAULTS, absoluteRoots, readConfig, type TaskProgressConfig } from './config.ts'
 
 /** The namespace this plugin owns. Must be a lowercase hyphenated identifier. */
 export { SETTINGS_NAMESPACE }
@@ -89,20 +89,6 @@ function integer(value: unknown, fallback: number, min: number, max: number): nu
 /** A single safe path segment. */
 const DIR_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/
 
-/** A bounded, deduplicated list of absolute-looking root paths. */
-function rootList(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  const seen = new Set<string>()
-  for (const entry of value) {
-    if (typeof entry !== 'string') continue
-    const trimmed = entry.trim()
-    if (trimmed.length === 0 || seen.has(trimmed)) continue
-    seen.add(trimmed)
-    if (seen.size >= 32) break
-  }
-  return [...seen]
-}
-
 /**
  * Resolve one candidate section into a complete, valid value.
  *
@@ -126,7 +112,7 @@ export function resolveProgressSettings(candidate: unknown): ProgressSettings {
     historyLimit: integer(record['historyLimit'], CONFIG_DEFAULTS.historyLimit, 1, 200),
     maxTasks: integer(record['maxTasks'], CONFIG_DEFAULTS.maxTasks, 1, 2000),
     maxFileBytes: integer(record['maxFileBytes'], CONFIG_DEFAULTS.maxFileBytes, 4096, 8 * 1024 * 1024),
-    roots: rootList(record['roots']),
+    roots: absoluteRoots(record['roots']),
     remindAfterMs: integer(record['remindAfterMs'], CONFIG_DEFAULTS.remindAfterMs, 0, 3_600_000),
     // A toggle is the one field where "unset" and "off" are different answers, so
     // anything that is not a boolean resolves to the default rather than to a

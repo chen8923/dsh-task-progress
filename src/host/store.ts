@@ -24,6 +24,7 @@ import {
   isTerminal,
   isValidSessionSegment,
   isValidTaskId,
+  normalizeMessage,
   parseEvent,
   type ProgressState,
   type ProgressTask,
@@ -131,20 +132,29 @@ export interface TaskStore {
   stats(): StoreStats
 }
 
-/** Read at most `maxBytes` from the tail of a file, dropping a partial first line. */
+/**
+ * Read at most `maxBytes` from the tail of a file, dropping a partial first line.
+ *
+ * The buffer is zero-filled and the read count is honoured, rather than reading
+ * into `allocUnsafe` and decoding the whole buffer: a file truncated between the
+ * `stat` and the read (a producer rewriting its own file, an editor saving it)
+ * would otherwise fold whatever was in those heap bytes — and a stray run of them
+ * that happened to parse would go on the wire as a task message.
+ */
 function readTail(path: string, maxBytes: number): string {
   const size = statSync(path).size
   const start = size > maxBytes ? size - maxBytes : 0
   if (size === 0) return ''
   const length = size - start
-  const buffer = Buffer.allocUnsafe(length)
+  const buffer = Buffer.alloc(length)
   const fd = openSync(path, 'r')
+  let read = 0
   try {
-    readSync(fd, buffer, 0, length, start)
+    read = readSync(fd, buffer, 0, length, start)
   } finally {
     closeSync(fd)
   }
-  const text = buffer.toString('utf8')
+  const text = buffer.subarray(0, read).toString('utf8')
   // A tail read starts mid-line whenever the file outgrew the ceiling; that
   // fragment is not a JSON object and would be dropped anyway, but slicing it
   // off keeps the fold's line count honest.
@@ -402,9 +412,13 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
     const settlement = settleTask(task, found)
     if (settlement === null) return task
     const { job, outcome, state } = settlement
-    const ended: TaskEnding = job.detail === undefined
+    // The registry's own detail line is bounded here rather than only where it is
+    // rendered: everything this store publishes is a document, and a document
+    // should not be able to grow a field because another service grew one.
+    const detail = job.detail === undefined ? '' : normalizeMessage(job.detail)
+    const ended: TaskEnding = detail.length === 0
       ? { job: job.id, status: outcome }
-      : { job: job.id, status: outcome, detail: job.detail }
+      : { job: job.id, status: outcome, detail }
     return {
       ...task,
       state,

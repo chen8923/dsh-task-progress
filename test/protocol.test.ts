@@ -135,6 +135,21 @@ test('parseState carries the client-facing knobs, including the overlay policy',
   assert.equal(parseState('{"tasks":[],"overlayUnreported":"yes"}')?.overlayUnreported, false)
 })
 
+test('a row the reader cannot trust is dropped, and its text is bounded', () => {
+  // The Host half already validates ids and bounds text; the browser re-checks
+  // because a row is rendered from producer text and the reader is the last gate.
+  const state = parseState(JSON.stringify({
+    tasks: [
+      { task: '../evil', state: 'running' },
+      { task: 'a/b', state: 'running' },
+      { task: '', state: 'running' },
+      { task: 'ok', state: 'running', unit: 'u'.repeat(80) },
+    ],
+  }))
+  assert.deepEqual(state?.tasks.map(task => task.task), ['ok'])
+  assert.equal(state?.tasks[0]?.unit.length, 24)
+})
+
 test('parseState refuses anything it cannot trust', () => {
   for (const body of ['', 'nope', '[]', '{"tasks":"x"}', 'null']) {
     assert.equal(parseState(body), null, `expected null for ${JSON.stringify(body)}`)

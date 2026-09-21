@@ -279,6 +279,10 @@ function parseTask(raw: unknown): ProgressTask | null {
   const state = normalizeState(record['state'])
   const task = record['task']
   if (state === null || typeof task !== 'string' || task.length === 0) return null
+  // Depth in one place: the Host half already rejects an unusable id and bounds
+  // the unit, and a browser that re-checks costs nothing — the row is rendered
+  // from producer text, so the reader is the last gate that should trust it.
+  if (!isValidTaskId(task)) return null
   const recent = Array.isArray(record['recent'])
     ? record['recent'].filter((line): line is string => typeof line === 'string').slice(-WIRE_HISTORY)
     : []
@@ -291,7 +295,7 @@ function parseTask(raw: unknown): ProgressTask | null {
     msg: normalizeMessage(record['msg']),
     done: nonNegative(record['done']),
     total: nonNegative(record['total']),
-    unit: typeof record['unit'] === 'string' ? record['unit'] : '',
+    unit: typeof record['unit'] === 'string' ? record['unit'].slice(0, 24) : '',
     startedAt: nonNegative(record['startedAt']) ?? 0,
     updatedAt: nonNegative(record['updatedAt']) ?? 0,
     recent,

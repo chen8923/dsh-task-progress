@@ -70,6 +70,36 @@ function bounded(value: unknown, fallback: number, min: number, max: number): nu
 }
 
 /**
+ * The usable entries of a configured root list.
+ *
+ * The setting is documented as "extra absolute roots", and a relative entry would
+ * silently resolve against whatever directory the DSH process happens to have
+ * been started in — which is not a root anybody chose. Entries that are not
+ * absolute are dropped, deduplicated, and capped; a directory that does not exist
+ * is kept, because it may simply not exist yet.
+ * @param value - the raw setting.
+ * @returns absolute paths, in the order given.
+ */
+export function absoluteRoots(value: unknown): string[] {
+  if (!Array.isArray(value)) return [...CONFIG_DEFAULTS.roots]
+  const seen = new Set<string>()
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue
+    const trimmed = entry.trim()
+    if (trimmed.length === 0) continue
+    if (!isAbsolutePath(trimmed)) continue
+    seen.add(trimmed)
+    if (seen.size >= 32) break
+  }
+  return [...seen]
+}
+
+/** Whether a path is absolute on the platform this plugin is running on. */
+function isAbsolutePath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]/.test(value) || value.startsWith('/')
+}
+
+/**
  * Read the plugin row's configuration.
  * @param raw - the config object DSH passed to `apply`, of unknown shape.
  * @returns a complete configuration; unusable keys fall back to their defaults.
@@ -79,9 +109,6 @@ export function readConfig(raw: unknown): TaskProgressConfig {
   const dirName = typeof record['dirName'] === 'string' && DIR_NAME_RE.test(record['dirName'])
     ? record['dirName']
     : CONFIG_DEFAULTS.dirName
-  const roots = Array.isArray(record['roots'])
-    ? record['roots'].filter((root): root is string => typeof root === 'string' && root.length > 0)
-    : CONFIG_DEFAULTS.roots
   return {
     dirName,
     scanMs: bounded(record['scanMs'], CONFIG_DEFAULTS.scanMs, 250, 60_000),
@@ -90,7 +117,7 @@ export function readConfig(raw: unknown): TaskProgressConfig {
     historyLimit: bounded(record['historyLimit'], CONFIG_DEFAULTS.historyLimit, 1, 200),
     maxTasks: bounded(record['maxTasks'], CONFIG_DEFAULTS.maxTasks, 1, 2000),
     maxFileBytes: bounded(record['maxFileBytes'], CONFIG_DEFAULTS.maxFileBytes, 4096, 8 * 1024 * 1024),
-    roots: roots.slice(0, 32),
+    roots: absoluteRoots(record['roots']),
     // Zero is a real value here: it is how a deployment turns the reminder off.
     remindAfterMs: bounded(record['remindAfterMs'], CONFIG_DEFAULTS.remindAfterMs, 0, 3_600_000),
     // `false` is a real value too: it is the default, and clearing a toggle has

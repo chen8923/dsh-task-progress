@@ -54,10 +54,13 @@ somebody used to have to write by hand:
   hand-written producer walks into: in PowerShell a native command's non-zero exit
   does **not** throw, so a `catch`-only script reports a failed run as `done`.
 - **Progress is read, not demanded.** A `12%` or a `12/88` anywhere in a line is
-  understood without being told what the tool prints; `--pattern` covers the rest.
-  Repeated identical lines do not fill the file — a change is reported, and so is
-  the passage of time (every 30 s), because a command printing one unchanging line
-  is still alive.
+  understood without being told what the tool prints; `--pattern` covers the rest,
+  and it is matched against at most 1000 characters of a line. A pattern that
+  repeats a group which already repeats (`(a+)+`) is **refused rather than run**:
+  it backtracks exponentially, which would hang the wrapped command instead of
+  reporting on it. Repeated identical lines do not fill the file — a change is
+  reported, and so is the passage of time (every 30 s), because a command printing
+  one unchanging line is still alive.
 - **The task id is in the command line by construction**, which is the
   correlation the reader needs (see *When the writer dies*). A wrapper that is
   killed is settled from its job record like any other.
@@ -226,6 +229,15 @@ the honest answer to "nobody knows", and the panel's own *no update for …* mar
 (60 s of silence) says the rest. Where the composition has no job registry — the
 plugin uses `ctx.jobs` and `ctx.agents` through optional injection — nothing is
 inferred at all, and the file is again the whole truth.
+
+**What this cannot know.** The match is one-directional: a job is recognised as
+the writer because its label names the task. So a *second* writer whose command
+line never names the task id is invisible to condition 2 — if two jobs append to
+one task id and only one of them says the id, the row can be published as ended
+while the silent one is still working. The defence is the rule two sections up:
+one task id, one writer, and a task id that appears in the command line. A row
+that keeps saying `running` is the failure this can still produce, and it is the
+one the panel is designed to survive.
 
 ## Configuration
 

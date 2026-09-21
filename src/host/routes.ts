@@ -35,12 +35,22 @@ export interface ConnectionLike {
  *
  * The route matches its path exactly, so the query string is the only input it
  * reads at all: there is no body, no header, and no path segment to interpret.
+ *
+ * Defensive by construction: Node rejects a malformed request line before a
+ * handler ever runs, so an unparseable URL is unreachable in practice — but a
+ * request that cannot be parsed asks about no session, and "no session" is
+ * already answered with an empty document rather than an error.
  * @param req - the incoming request.
  * @returns the session id, or undefined when the caller named none.
  */
 function requestedSession(req: IncomingMessage): string | undefined {
-  // Node always sets `url` on a server request; String keeps that fact local.
-  const url = new URL(String(req.url ?? '/'), 'http://localhost')
+  let url: URL
+  try {
+    // Node always sets `url` on a server request; String keeps that fact local.
+    url = new URL(String(req.url ?? '/'), 'http://localhost')
+  } catch {
+    return undefined
+  }
   const session = url.searchParams.get('session')
   return session === null || session.length === 0 ? undefined : session
 }

@@ -21,10 +21,10 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { changeIsWorthReporting, parseProgress, runWrapped } from '../bin/dsh-progress.mjs'
+import { changeIsWorthReporting, parseProgress, patternRejection, resolvePattern, runWrapped } from '../bin/dsh-progress.mjs'
 
 /** No sample at all: what a task looks like before its first parse. */
 const nothing = { pct: null, done: null, total: null, msg: '' }
@@ -67,6 +67,18 @@ test('only a change, or a heartbeat, is worth a line in the file', () => {
   assert.equal(changeIsWorthReporting(nothing, { ...nothing }, 1_000, 30_000), false)
 })
 
+test('run compiles a pattern through one guarded path, and refuses there', () => {
+  // The unit check above proves the scanner works; this proves the CLI is wired
+  // to it. Without this, deleting the call in `run` would leave the suite green —
+  // which is exactly what the mutation harness reported the first time.
+  assert.deepEqual(resolvePattern(undefined), { pattern: null, error: null }, 'no pattern is not an error')
+  assert.deepEqual(resolvePattern(''), { pattern: null, error: null })
+  assert.match(resolvePattern('(a+)+$').error ?? '', /repeats a group that already repeats/)
+  assert.match(resolvePattern('(').error ?? '', /not a valid regular expression/)
+  assert.equal(resolvePattern('Progress: (\\d+)%').pattern instanceof RegExp, true)
+  assert.equal(resolvePattern('Progress: (\\d+)%').error, null)
+})
+
 test('the wrapper reports a run, relays its output, and ends it from the exit code', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'dtp-run-'))
   const events: Record<string, unknown>[] = []
@@ -95,6 +107,60 @@ test('the wrapper reports a run, relays its output, and ends it from the exit co
     assert.ok(echoed.join('').includes('phase two'), 'the child output is relayed, not swallowed')
     // The relay file is an implementation detail: it does not outlive the run.
     assert.deepEqual(readdirSync(dir), [], 'the wrapper left something behind in the progress directory')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a pattern that would backtrack catastrophically is refused, not run', () => {
+  // `--pattern` arrives on a command line the model writes, so this has to be
+  // refused rather than trusted. Measured before the guard existed: `(a+)+$`
+  // against 20 characters took 10 ms, against 40 it never finished.
+  assert.match(patternRejection('(a+)+$') ?? '', /repeats a group that already repeats/)
+  assert.match(patternRejection('(\\d+)*') ?? '', /repeats a group that already repeats/)
+  assert.match(patternRejection('(foo{1,3})+') ?? '', /repeats a group that already repeats/)
+  assert.match(patternRejection('a**') ?? '', /two quantifiers/)
+  assert.match(patternRejection('x'.repeat(300)) ?? '', /longer than/)
+
+  // The shapes a producer actually needs all pass.
+  assert.equal(patternRejection('Progress: (\\d+)%'), null)
+  assert.equal(patternRejection('(\\d{1,3})\\s*%'), null)
+  assert.equal(patternRejection('ETA (\\d+) remaining'), null)
+  assert.equal(patternRejection('[a+]+'), null, 'a quantifier inside a class is a literal, not a repeat')
+  assert.equal(patternRejection('a+b*c?'), null)
+  assert.equal(patternRejection('\\(\\d+\\)'), null, 'escaped parentheses are literals')
+})
+
+test('the pattern is applied to a bounded line, whatever the command prints', () => {
+  // Defence in depth behind the guard above: a long line must not become a long
+  // regex input, so a pathological pattern cannot be handed a big subject.
+  const long = `${'x'.repeat(5000)} 77%`
+  assert.equal(parseProgress(long, /(\d+)%/).pct, null, 'the percentage sat beyond the bound')
+  const near = `${'x'.repeat(900)} 77%`
+  assert.equal(parseProgress(near, /(\d+)%/).pct, 77, 'a line inside the bound is still read')
+  // The message is unaffected: it is taken from the line, not from the match.
+  assert.equal(parseProgress(long).msg.length, 160)
+})
+
+test('a relay left behind by a killed run is replaced, never appended to', async () => {
+  // `taskkill` gives the wrapper no chance to clean up, so the next run of the
+  // same task finds a stale relay. Reading it would report a dead run's output.
+  const dir = mkdtempSync(join(tmpdir(), 'dtp-run-'))
+  const events: Record<string, unknown>[] = []
+  try {
+    writeFileSync(join(dir, 'stale.relay'), 'garbage from an older run 13%\n')
+    await runWrapped({
+      task: 'stale',
+      dir,
+      everyMs: 40,
+      heartbeatMs: 60_000,
+      command: [process.execPath, '-e', "console.log('99%'); process.exit(0)"],
+      emit: (event) => { events.push(event) },
+      out: () => {},
+    })
+    assert.equal(events.some(event => String(event['msg'] ?? '').includes('garbage')), false, 'the stale bytes were not read')
+    assert.ok(events.some(event => event['pct'] === 99), 'the run own output was read')
+    assert.deepEqual(readdirSync(dir), [], 'and nothing was left behind')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

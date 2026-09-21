@@ -300,11 +300,14 @@ test('a discovered root picks up session directories it did not remember', () =>
 test('config falls back to defaults and clamps hostile values', () => {
   assert.deepEqual(readConfig(undefined), CONFIG_DEFAULTS)
   assert.deepEqual(readConfig('nonsense'), CONFIG_DEFAULTS)
-  const clamped = readConfig({ scanMs: 1, pollMs: 10 ** 9, dirName: '../evil', roots: ['a', 'b'] })
+  // A root is a directory somebody chose, and the setting is documented as
+  // absolute: a relative entry is dropped rather than resolved against whatever
+  // directory the DSH process happens to have been started in.
+  const clamped = readConfig({ scanMs: 1, pollMs: 10 ** 9, dirName: '../evil', roots: ['a', '/b'] })
   assert.equal(clamped.scanMs, 250)
   assert.equal(clamped.pollMs, 10_000)
   assert.equal(clamped.dirName, CONFIG_DEFAULTS.dirName)
-  assert.deepEqual(clamped.roots, ['a', 'b'])
+  assert.deepEqual(clamped.roots, ['/b'])
 })
 
 test('a settings write replaces the configured roots without dropping the composition\'s own', () => {
@@ -425,6 +428,19 @@ function settled(config = {}, jobs: readonly JobView[] | undefined = [job()]) {
   if (jobs !== undefined) f.store.setJobSource({ jobsFor: () => jobs })
   return f
 }
+
+test('the registry detail is bounded at the source, not only where it is drawn', () => {
+  // Everything the store publishes is a document; a field must not be able to
+  // grow because another service grew one.
+  const f = settled({}, [job({ status: 'killed', detail: 'x'.repeat(500) })])
+  try {
+    const detail = f.store.snapshot(9_000, f.sessionId).tasks[0]?.ended?.detail ?? ''
+    assert.equal(detail.length, 200, 'bounded to one message, ellipsis included')
+    assert.ok(detail.endsWith('…'))
+  } finally {
+    f.cleanup()
+  }
+})
 
 test('a task whose writer was killed is published as cancelled, and says why', () => {
   const f = settled()

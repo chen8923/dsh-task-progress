@@ -9,6 +9,61 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ## [Unreleased]
 
+### Security
+
+- **`--pattern` can no longer wedge a wrapped command.** The flag takes a regular
+  expression from a command line the model writes, and `(a+)+$`-style nesting
+  backtracks exponentially — measured, 20 characters of input took 10 ms and 40
+  never finished. Such a pattern is now **refused with a message** rather than
+  compiled (`patternRejection`), a custom pattern only ever sees the first 1000
+  characters of a line, and the guard is exercised through the same path `run`
+  takes, so disconnecting it fails the suite. The refusal came out of a security
+  review of the unreleased work; the reach is the wrapped job's own process, never
+  the DSH host.
+- **`readTail` no longer reads into uninitialised memory.** It allocated with
+  `allocUnsafe` and decoded the whole buffer while ignoring `readSync`'s return,
+  so a file truncated between the `stat` and the read could be folded from heap
+  bytes — and a run of them that happened to parse would go on the wire as a task
+  message. The buffer is zero-filled and the read count is honoured.
+- `requestedSession` parses its URL defensively; `src/protocol.ts` re-validates a
+  task id and bounds a unit on the reading side as well as the writing one, so the
+  browser is a last gate rather than a trusting one; the settle truncates the
+  registry's `detail` where it is copied, not only where it is drawn.
+
+### Fixed
+
+- **A relative entry in Extra roots is dropped instead of resolved against
+  wherever the DSH process was started.** The setting has always been documented
+  as *absolute* roots, and the resolver accepted anything non-empty. An entry that
+  is not absolute now disappears from the card after saving — visibly, because the
+  card re-seeds from what the Host accepted. A drive-letter path, a UNC path, and a
+  POSIX path are all absolute; a bare `relative/dir` is not.
+
+### Added
+
+- **`test/privacy.test.ts` now guards what a text scan cannot see.** It used to
+  skip images, archives and anything over 4 MB, which left the committed
+  screenshot — a surface that can show a wallpaper, a session title, another
+  plugin's balance widget — outside every rule. It now refuses an image that is
+  not in an explicit audited list, inspects the PNG chunks of the ones that are
+  (no `tEXt`/`iTXt`/`zTXt`/`eXIf`/`tIME`), refuses an archive, refuses any file
+  larger than the scan ceiling, and refuses an address that is not one of GitHub's
+  noreply forms. Nine mutations confirm the new guards bite; the tenth is
+  documented as intentionally undetectable (see below).
+- **`SECURITY.md`** states the two things the reviews found it had left implicit:
+  the reminder notice quotes the job's own command label, and the history rewrite
+  removed paths naming *this machine* — the pre-rewrite blobs still hold synthetic
+  drive-letter placeholders, which the worktree scan now refuses as well.
+
+### Changed
+
+- **`docs/PROTOCOL.md` names the one case the settle cannot see**: a second writer
+  whose command line never mentions the task id is invisible to the live-job veto,
+  so two writers on one id can still produce a row published as ended while the
+  silent one works. The rule that prevents it (one writer per task id, and an id
+  that appears in the command line) was already documented; it now says what
+  happens when it is broken.
+
 ### Added
 
 - **A real screenshot at the top of both READMEs**, replacing the ASCII mock-up

@@ -26,7 +26,7 @@ itself a security report.
 | **Shell environment** | Every shell call gets `DSH_PROGRESS_DIR` and `DSH_PROGRESS_CLI` added. |
 | **Network** | None. No outbound request, no telemetry, no update check, no child process. The browser half fetches one path on the same origin it was served from. |
 | **HTTP surface** | One route: `GET`/`HEAD /plugins/task-progress/state`. It calls `ctx.connection.requestRejection` **before** reading anything, answers for exactly one `?session=` at a time, and puts no filesystem path on the wire. Other methods get `405`. |
-| **Model context** | One **static** system-prompt section, placed beside DSH's background-job guidance. Plus at most **one** appended notice per background job, and only for a job that has run past `remindAfterMs` (default 30 s) with no reported task accounting for it. Nothing else is ever injected, and a notice repeats for no job. |
+| **Model context** | One **static** system-prompt section, placed beside DSH's background-job guidance. Plus at most **one** appended notice per background job, and only for a job that has run past `remindAfterMs` (default 30 s) with no reported task accounting for it. Nothing else is ever injected, and a notice repeats for no job. The notice names the job and quotes its **label** — for a shell job, the command line the model itself ran — truncated and whitespace-collapsed. Nothing from a progress file is ever quoted into a model step. |
 | **Job snapshots** | `ctx.jobs.list(agent)` — documented as non-consuming snapshots: id, kind, label, lifecycle status, timestamps, owner session. It is read for the calling agent only, and only to decide whether a long job has gone unreported. `ctx.jobs.read()` is never called: that cursor is single-consumer and belongs to the model's `job_output` tool. No job output is read, stored, logged, or sent anywhere. |
 | **Browser job mirror** | The panels draw DSH's own per-session job mirror (the rows the session header lists) so a job with no reported progress still has a row: command label, state, elapsed time, exit detail. This is client-side state DSH already pushed to that browser; it never passes through this plugin's route or reaches the Host half. |
 | **Tools** | None. The plugin adds no tool, so the tool catalogue — and the cached prefix built from it — is untouched. |
@@ -72,7 +72,16 @@ percentages are clamped, and a message is bounded to one line and a fixed length
 
 The 0.1.0 release was audited before publishing: the endpoint was scoped to one
 session, in-memory state was bounded, and the repository history was rewritten so
-no local absolute path ships in a blob.
+that no path naming this machine is in any blob. Blobs from before that rewrite
+still contain **synthetic** drive-letter placeholders in test fixtures — a drive
+letter, a colon, a made-up directory name such as a working directory that never
+existed — which name nobody; the same scan that forbids a real path now refuses
+those in the worktree too.
+
+`test/privacy.test.ts` has grown past paths since: it also refuses an image that no
+human has audited (with a PNG metadata check for text chunks, EXIF and timestamps),
+an archive, a file too big to read, and any address that is not one of GitHub's
+noreply forms.
 
 ---
 
