@@ -70,13 +70,13 @@ test('an unserved namespace renders nothing', () => {
 })
 
 test('a served namespace seeds its fields from the resolved value', () => {
-  const { scope } = fakeScope({ value: { pollMs: 2000, roots: ['C:/a'] } })
+  const { scope } = fakeScope({ value: { pollMs: 2000, roots: ['/a'] } })
   const form = createSettingsForm(scope, SPECS)
   const state = form.getSnapshot()
   assert.equal(state.available, true)
   assert.equal(state.dirty, false)
   assert.equal(state.fields['pollMs']?.text, '2000')
-  assert.equal(state.fields['roots']?.text, 'C:/a')
+  assert.equal(state.fields['roots']?.text, '/a')
   assert.equal(state.fields['pollMs']?.overridden, false)
 })
 
@@ -127,12 +127,12 @@ test('saving writes the staged value and clears the draft', async () => {
 })
 
 test('a list field edits one entry per line and clears when emptied', async () => {
-  const { scope, read } = fakeScope({ value: { roots: ['C:/a'] }, base: { roots: [] } })
+  const { scope, read } = fakeScope({ value: { roots: ['/a'] }, base: { roots: [] } })
   const form = createSettingsForm(scope, SPECS)
-  form.edit('roots', 'C:/a\n\n C:/b \n')
+  form.edit('roots', '/a\n\n /b \n')
   form.save()
   await new Promise(resolve => setTimeout(resolve, 0))
-  assert.deepEqual(read().user?.['roots'], ['C:/a', 'C:/b'])
+  assert.deepEqual(read().user?.['roots'], ['/a', '/b'])
 
   form.edit('roots', '   ')
   form.save()

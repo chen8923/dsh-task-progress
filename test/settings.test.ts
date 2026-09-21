@@ -62,7 +62,7 @@ test('a valid section survives resolution unchanged', () => {
     historyLimit: 5,
     maxTasks: 10,
     maxFileBytes: 8192,
-    roots: ['C:/work'],
+    roots: ['/work'],
     remindAfterMs: 45_000,
   }
   assert.deepEqual(resolveProgressSettings(section), section)
@@ -135,8 +135,8 @@ test('register passes the row config as the composition base, and applies live',
       }
     },
   }
-  const scope = registerProgressSettings(settings, { scanMs: 5000, roots: ['C:/x'] })
-  assert.deepEqual(calls, [{ ns: SETTINGS_NAMESPACE, base: { ...CONFIG_DEFAULTS, scanMs: 5000, roots: ['C:/x'] }, applies: 'live' }])
+  const scope = registerProgressSettings(settings, { scanMs: 5000, roots: ['/x'] })
+  assert.deepEqual(calls, [{ ns: SETTINGS_NAMESPACE, base: { ...CONFIG_DEFAULTS, scanMs: 5000, roots: ['/x'] }, applies: 'live' }])
   // The handle resolves through the same schema, so the base is what `get()`
   // reports until a user layer exists.
   assert.equal(scope.get().scanMs, 5000)

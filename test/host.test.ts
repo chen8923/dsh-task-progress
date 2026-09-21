@@ -133,7 +133,7 @@ test('the environment contributor hands out a per-session directory', () => {
     },
   }
   const store = createTaskStore(readConfig({}))
-  const dispose = registerProgressEnv(shellEnv, store, 'C:/pkg/bin/dsh-progress.mjs')
+  const dispose = registerProgressEnv(shellEnv, store, '/pkg/bin/dsh-progress.mjs')
   try {
     const contributor = registered[0]
     assert.ok(contributor)
@@ -141,7 +141,7 @@ test('the environment contributor hands out a per-session directory', () => {
 
     const values = contributor.resolve({ agent: { session: { header: { id: 'session-9', cwd: root } } } })
     assert.equal(values[PROGRESS_DIR_KEY], join(root, '.dsh-progress', 'session-9'))
-    assert.equal(values[PROGRESS_CLI_KEY], 'C:/pkg/bin/dsh-progress.mjs')
+    assert.equal(values[PROGRESS_CLI_KEY], '/pkg/bin/dsh-progress.mjs')
     // Handing out the path is also what creates it, before the script starts.
     assert.equal(existsSync(values[PROGRESS_DIR_KEY] ?? ''), true)
 
