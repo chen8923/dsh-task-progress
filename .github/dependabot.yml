@@ -11,6 +11,20 @@ updates:
     groups:
       dev-dependencies:
         patterns: ['*']
+    ignore:
+      # The build toolchain is pinned on purpose, and this is the reason: `lib/`
+      # is committed so that a git install is one command, which means a bundler
+      # bump changes the bytes that ship. Every tsdown release therefore needs a
+      # rebuild committed alongside it, and a bot can only open the half of that
+      # change it can do — a red PR, every week, forever.
+      #
+      # A bump is a deliberate act: raise the version, `npm run build`, confirm
+      # `test/bundle.test.ts` still passes, and commit `lib/` in the same commit.
+      # See the Development section of README.md. Security advisories still
+      # arrive as alerts (vulnerability alerts are enabled on this repository),
+      # which is the trigger to do exactly that.
+      - dependency-name: 'tsdown'
+      - dependency-name: 'typescript'
 
   # The workflows are part of the supply chain: a stale action is an unaudited
   # dependency that runs with a token.
