@@ -64,7 +64,23 @@ jobs:
         run: |
           node -e "const v=require('./package.json').version; const t=process.env.GITHUB_REF_NAME.replace(/^v/,''); if(v!==t){console.error('tag '+t+' != package.json '+v); process.exit(1)} console.log('tag and package.json agree on '+v)"
 
+      # A tag can be pushed twice and a version can already be on the registry
+      # (published by hand, say). Failing for that teaches nobody anything —
+      # npm would refuse the second publish anyway — so the job asks the
+      # registry first and succeeds without publishing when the answer is yes.
+      - name: Is this version already on the registry?
+        id: registry
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "dsh-task-progress@${version}" version >/dev/null 2>&1; then
+            echo "dsh-task-progress@${version} is already published; nothing to do"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # `prepublishOnly` rebuilds lib/ from the sources, so the tarball can never
       # ship a stale bundle. `--provenance` is what adds the attestation.
       - name: Publish with provenance
+        if: steps.registry.outputs.publish == 'true'
         run: npm publish --provenance --access public

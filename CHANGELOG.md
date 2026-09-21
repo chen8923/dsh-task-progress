@@ -9,6 +9,8 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-09-21
+
 ### Added
 
 - **`SECURITY.md`**, plus private vulnerability reporting switched on for the
@@ -122,4 +124,5 @@ First release, so these are properties rather than changes:
 - No runtime dependencies, no `postinstall`, no network calls from either half,
   and no HTML injection surface in the browser half.
 
+[0.1.1]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.1
 [0.1.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.0

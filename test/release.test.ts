@@ -16,13 +16,21 @@ const read = (name: string): string => readFileSync(new URL(name, root), 'utf8')
 /** Escape a version string for use inside a regular expression. */
 const literal = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-test('the version is stated in four places and invented in none', () => {
+test('the version is stated in every place that names it, and invented in none', () => {
   const pkg = JSON.parse(read('package.json')) as { version: string }
   assert.match(pkg.version, /^\d+\.\d+\.\d+$/, 'package.json version is not semver')
   const version = literal(pkg.version)
   assert.match(read('README.md'), new RegExp(`Version ${version}\\b`), 'README.md does not state the version')
   assert.match(read('README.zh.md'), new RegExp(`版本 ${version}\\b`), 'README.zh.md does not state the version')
   assert.match(read('CHANGELOG.md'), new RegExp(`## \\[${version}\\]`), 'CHANGELOG.md has no entry for this version')
+  // The CLI prints a version of its own, and nothing else reads that string — so
+  // it rots in silence: it still said 0.1.0 after the plugin had moved on, and no
+  // test noticed until a release made someone look.
+  assert.match(
+    read('bin/dsh-progress.mjs'),
+    new RegExp(`dsh-progress ${version}`),
+    'the CLI advertises a different version',
+  )
 })
 
 test('every path the READMEs tell a user to run ships in the package', () => {
