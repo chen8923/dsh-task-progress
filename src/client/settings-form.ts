@@ -163,6 +163,29 @@ export function listField(field: string): FieldSpec {
   }
 }
 
+/**
+ * A checkbox.
+ *
+ * The draft is still text, because everything else in this form is: `'true'`
+ * and `'false'` are the two states a checkbox can express, and the card renders
+ * one from the draft rather than inventing a second kind of state. What it
+ * cannot express is **inherit** — a checkbox has no empty position — which is
+ * exactly what the reset control is for, and why clearing a toggle and switching
+ * it off are different writes.
+ *
+ * Nothing a checkbox can produce is unacceptable, so `parse` never returns
+ * undefined and a toggle can never block a save.
+ * @param field - field name inside the namespace section.
+ * @returns the field's conversion spec.
+ */
+export function toggleField(field: string): FieldSpec {
+  return {
+    field,
+    format: value => (typeof value === 'boolean' ? String(value) : ''),
+    parse: text => ({ kind: 'set', value: text.trim() === 'true' }),
+  }
+}
+
 /** One staged edit. */
 interface StagedEdit {
   readonly text: string

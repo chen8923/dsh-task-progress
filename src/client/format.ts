@@ -107,6 +107,42 @@ export function countRunning(tasks: readonly ProgressTask[]): number {
   return tasks.reduce((total, task) => total + (task.state === 'running' ? 1 : 0), 0)
 }
 
+/** What the floating surface should do with what it has. */
+export interface OverlayPolicy {
+  /** Whether the floating surface shows anything at all. */
+  readonly visible: boolean
+  /** Whether what it shows is work nobody reported for, and should say so. */
+  readonly warn: boolean
+}
+
+/**
+ * Whether the floating surface may interrupt, and in what tone.
+ *
+ * It is one rule with one asymmetry, and the asymmetry is the point. Work **the
+ * user asked to watch** — a script reporting progress — earns a pill: that is
+ * the feature, and popping up is what it is for. Work nobody reported for does
+ * not, by default: the job was launched for the work, not for this panel, and a
+ * widget that summons itself to announce a missing report is a summons nobody
+ * opted into. Those rows are still in the sidebar tab, which is a surface the
+ * user opens on purpose.
+ *
+ * `allowUnreported` is the deployment's answer to that: a hidden setting, off
+ * unless somebody goes looking, because the loud behaviour is the one that needs
+ * justifying rather than the quiet one.
+ * @param input - how many reported tasks are visible, how many live jobs nobody
+ *   reported for, and whether that second number may summon the surface.
+ * @returns whether to show, and whether to show in the attention colour.
+ */
+export function overlayPolicy(input: {
+  readonly reported: number
+  readonly unreported: number
+  readonly allowUnreported: boolean
+}): OverlayPolicy {
+  const unreportedOnly = input.reported === 0 && input.unreported > 0
+  if (unreportedOnly && !input.allowUnreported) return { visible: false, warn: false }
+  return { visible: input.reported > 0 || input.unreported > 0, warn: unreportedOnly }
+}
+
 /**
  * The task a collapsed overlay should summarise: the running one that moved
  * most recently, falling back to the newest row of any state.

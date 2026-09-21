@@ -566,6 +566,19 @@ const CSS = `
    the theme does define. */
 .dtp-setInput[aria-invalid] { border-color: var(--dsw-alias-state-error-primary); }
 
+/* A checkbox: the row's own label is its accessible name, so it sits alone under
+   it. Sized and tinted from the theme rather than left to the platform default,
+   which is the one control that would otherwise not follow the palette. */
+.dtp-setToggle {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--dsw-alias-brand-primary);
+  cursor: pointer;
+}
+
+.dtp-setToggle:disabled { cursor: default; }
+
 .dtp-setTextarea {
   height: auto;
   min-height: 62px;

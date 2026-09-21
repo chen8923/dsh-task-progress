@@ -15,6 +15,7 @@ import {
   formatPct,
   headlineTask,
   isStalled,
+  overlayPolicy,
   selectTasks,
   unitText,
 } from '../src/client/format.ts'
@@ -114,4 +115,21 @@ test('counts and headline pick the moving task', () => {
 test('the clock is local wall time', () => {
   const stamp = new Date(2024, 0, 2, 3, 4, 5).getTime()
   assert.equal(formatClock(stamp), '03:04:05')
+})
+
+test('the floating surface only summons itself for work the user asked to watch', () => {
+  // Nothing at all: an idle session grows no widget.
+  assert.deepEqual(overlayPolicy({ reported: 0, unreported: 0, allowUnreported: false }), { visible: false, warn: false })
+
+  // Reported work: the pill is the point of the plugin, so it shows.
+  assert.deepEqual(overlayPolicy({ reported: 2, unreported: 0, allowUnreported: false }), { visible: true, warn: false })
+  assert.deepEqual(overlayPolicy({ reported: 1, unreported: 3, allowUnreported: false }), { visible: true, warn: false })
+
+  // Only unreported jobs: by default that is not a reason to interrupt anybody —
+  // the sidebar tab still lists them, which is where a reader who cares looks.
+  assert.deepEqual(overlayPolicy({ reported: 0, unreported: 3, allowUnreported: false }), { visible: false, warn: false })
+
+  // Opted in, the same state shows and shows in the attention colour: the row is
+  // a job nobody is reporting for, and saying so is the whole reason it is there.
+  assert.deepEqual(overlayPolicy({ reported: 0, unreported: 3, allowUnreported: true }), { visible: true, warn: true })
 })

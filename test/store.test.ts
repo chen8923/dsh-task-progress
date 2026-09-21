@@ -162,6 +162,22 @@ test('terminal tasks age out; running ones never do', () => {
   }
 })
 
+test('the document carries the overlay policy the browser half obeys', () => {
+  const off = fixture()
+  const on = fixture({ overlayUnreported: true })
+  try {
+    off.write('build', [{ task: 'build', pct: 1, at: 1 }])
+    on.write('build', [{ task: 'build', pct: 1, at: 1 }])
+    off.store.scan(1)
+    on.store.scan(1)
+    assert.equal(off.store.snapshot(1, off.sessionId).overlayUnreported, false)
+    assert.equal(on.store.snapshot(1, on.sessionId).overlayUnreported, true)
+  } finally {
+    off.cleanup()
+    on.cleanup()
+  }
+})
+
 test('a vanished file stops being served, which is what "clear" relies on', () => {
   // The protocol says deleting the file deletes the task. It used to be a lie:
   // the scan walked the directory's *current* entries and never reconciled them

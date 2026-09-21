@@ -6,8 +6,11 @@
  * on exactly its own two boxes — the rest of the frame stays usable while the
  * pill is on screen.
  *
- * It renders nothing at all when there is nothing to report: an idle session
- * must not grow a floating widget.
+ * It renders nothing at all when there is nothing to report, and — unless the
+ * deployment asked for it — nothing for work nobody reported for either: this is
+ * the one surface that interrupts, so it appears for work the user asked to
+ * watch, not for the absence of a report. {@link overlayPolicy} is that rule;
+ * the sidebar tab lists the unreported rows for anybody who goes looking.
  *
  * @module dsh-task-progress/client/ProgressOverlay
  */
@@ -15,7 +18,7 @@
 import { useState, type ReactNode } from 'react'
 import { unreportedJobs } from '../jobs.ts'
 import type { ProgressState } from '../protocol.ts'
-import { countRunning, headlineTask, selectTasks } from './format.ts'
+import { countRunning, headlineTask, overlayPolicy, selectTasks } from './format.ts'
 import { JobGroup } from './JobList.tsx'
 import type { Translate } from './locales.ts'
 import { useCurrentSession, useSessionJobs, type SessionsHook } from './session-hook.ts'
@@ -33,7 +36,7 @@ export interface ProgressOverlayProps {
 /**
  * The floating progress overlay.
  * @param props - the translator and the session selector hook.
- * @returns the pill (or expanded card), or null when nothing is running.
+ * @returns the pill (or expanded card), or null when nothing is worth showing.
  */
 export function ProgressOverlay({ t, useSessions }: ProgressOverlayProps): ReactNode {
   const current = useCurrentSession(useSessions)
@@ -43,11 +46,13 @@ export function ProgressOverlay({ t, useSessions }: ProgressOverlayProps): React
   const now = useNow(1000, tick)
   const tasks = selectTasks(state, current, now, 'active')
   const jobs = unreportedJobs(useSessionJobs(useSessions, current), tasks.map(task => task.task))
+  const policy = overlayPolicy({
+    reported: tasks.length,
+    unreported: jobs.length,
+    allowUnreported: state?.overlayUnreported === true,
+  })
 
-  // Nothing reported and nothing running: stay out of the way. A job that is
-  // running without reporting is *not* nothing — that is exactly the case this
-  // surface used to get wrong by disappearing.
-  if (tasks.length === 0 && jobs.length === 0) return null
+  if (!policy.visible) return null
 
   const running = countRunning(tasks)
   const headline = headlineTask(tasks)
@@ -56,7 +61,7 @@ export function ProgressOverlay({ t, useSessions }: ProgressOverlayProps): React
     : jobs.length > 0
       ? (jobs.length === 1 ? t('overlay.unreportedOne') : t('overlay.unreported', { count: jobs.length }))
       : t('overlay.active', { count: 0 })
-  const warn = running === 0 && jobs.length > 0
+  const warn = policy.warn
 
   return (
     <div className="dtp-overlay">

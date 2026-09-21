@@ -75,7 +75,25 @@ test('the text instructs rather than describes, and names the failure it prevent
   // The consequence is what makes the instruction worth following.
   assert.match(text, /empty progress panel/)
   // The name is how the panel and the reminder recognise a job that reports.
-  assert.match(text, /name the task after something recognisable/)
+  assert.match(text, /nam(?:e|ing) the task after something recognisable/)
+})
+
+test('the text leads with the cheap path, because that is what the model will do', () => {
+  const text = progressPromptText()
+  // Wrapping a command costs one tool call. Hand-writing a producer costs a
+  // probe, a script, an encoding fix and a syntax check — measured in a real
+  // session that spent six round trips on setup before the work started. The
+  // instruction therefore names the wrapper first and the escape hatch second.
+  assert.match(text, /run --task/, 'the cheapest recipe is named')
+  assert.ok(
+    text.indexOf('run --task') < text.indexOf('append one JSON event'),
+    'the wrapper is offered before the hand-written line',
+  )
+  assert.match(text, /longer than about 30 seconds/, 'the trigger still comes first')
+  assert.match(text, /append one JSON event/, 'the raw protocol stays as the escape hatch')
+  // The two traps a hand-written producer walks into are the wrapper's job now,
+  // so the section does not have to spend context on them.
+  assert.ok(text.length < 800, 'and it is still one paragraph: the section is paid for every session')
 })
 
 test('the text stays short enough to pay for in every session', () => {

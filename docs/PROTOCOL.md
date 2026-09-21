@@ -32,6 +32,49 @@ writes exactly the path given, which makes it the right tool for a producer
 whose file layout is fixed and the wrong tool for anything whose arguments come
 from somewhere you do not control (`clear --file` removes that path).
 
+## Wrapping a command instead of writing a producer
+
+The cheap path is the one to reach for first:
+
+```
+dsh-progress run --task sync-catalog -- python sync_catalog.py --task sync-catalog
+```
+
+It announces the task, follows the command's output, reports what it can read, and
+writes the ending itself. Four things follow from that, and each one is a step
+somebody used to have to write by hand:
+
+- **Nothing to synthesise.** There is no script per task kind, so there is no
+  PowerShell trap to discover, no `2>&1` to remember, no BOM to add and no syntax
+  check to run before the work can start. That whole loop — probe, author, fix,
+  re-encode, launch — is why setting a long task up used to cost more round trips
+  than the task's first result.
+- **The ending comes from the exit code.** A non-zero exit is `failed`, a clean one
+  is `done` with a full bar, and a signal is `cancelled`. This is also the trap a
+  hand-written producer walks into: in PowerShell a native command's non-zero exit
+  does **not** throw, so a `catch`-only script reports a failed run as `done`.
+- **Progress is read, not demanded.** A `12%` or a `12/88` anywhere in a line is
+  understood without being told what the tool prints; `--pattern` covers the rest.
+  Repeated identical lines do not fill the file — a change is reported, and so is
+  the passage of time (every 30 s), because a command printing one unchanging line
+  is still alive.
+- **The task id is in the command line by construction**, which is the
+  correlation the reader needs (see *When the writer dies*). A wrapper that is
+  killed is settled from its job record like any other.
+
+The relay is a **file**, not a pipe, and that is a hard constraint rather than a
+preference: a shell running under DSH's sandbox cannot create the pipes a piped
+child needs (`spawn` + `stdio: 'pipe'` fails with `EPERM`; the same spawn with a
+file descriptor works — both measured on this project's machine). The command's
+output is echoed to the wrapper's stdout as it arrives, so a job's output is still
+there to read, and the relay file is removed when the run ends. A wrapper exits
+with the wrapped command's exit code, so a shell can still branch on it.
+
+For anything the wrapper cannot express — a producer inside a longer script, a
+program that reports through a socket, a task stitched together from several
+commands — the file format below is the whole contract, and it is small on
+purpose.
+
 ## One line per event
 
 Each line is a JSON object. Fields are optional; **the last value of each field
@@ -98,8 +141,15 @@ record and answers **one session at a time**:
 
 ```
 GET /plugins/task-progress/state?session=<session-id>   (same origin, cookie-authenticated)
-{"v":1,"generatedAt":1730000000123,"pollMs":2000,"tasks":[ ... ]}
+{"v":1,"generatedAt":1730000000123,"pollMs":2000,"overlayUnreported":false,"tasks":[ ... ]}
 ```
+
+`pollMs` and `overlayUnreported` ride this document rather than the settings
+transport: every surface already polls here, and a panel that had to fetch its own
+configuration before deciding whether to render would be a second data path to
+keep correct. `overlayUnreported` is strictly `true` or absent — a deployment that
+never configured it must not have its panel start summoning itself because a
+proxy echoed something truthy.
 
 The session is part of the request, not a filter applied afterwards. DSH's web
 login is a fence around the whole instance rather than around a session, so an
@@ -195,11 +245,13 @@ row's `config` and then to the default below.
 | `maxTasks` | `200` | Cap on tasks in one document. |
 | `maxFileBytes` | `262144` | Tail read from one progress file. |
 | `roots` | `[]` | Extra absolute roots to discover directories under. |
-| `remindAfterMs` | `30000` | How long a background job may run with nothing reported before the Host tells the model **once** about it. Not a producer setting and not shown in the panel: it costs one short notice in that session's context, so `0` (off) is a legitimate value. |
+| `remindAfterMs` | `30000` | How long a background job may run with nothing reported before the Host tells the model **once** about it. It costs one short notice in that session's context, which is exactly why the number is editable in the panel rather than buried: `0` turns the reminder off, and that is a legitimate answer for somebody paying the context. |
+| `overlayUnreported` | `false` | Whether the floating panel may **appear on its own** for a background job whose script reports nothing. Off by default: the floating panel is the one surface that interrupts, so it shows up for work the user asked to watch rather than for the absence of a report. Those rows are still in the sidebar tab, which a reader opens deliberately. |
 
 A settings change is live. The Host half re-points its store, re-reads the extra
 roots, and picks up a new scan interval on its next tick; the state document's
-`pollMs` is read from the same value, so the browser follows without a reload.
+`pollMs` and `overlayUnreported` are read from the same value, so the browser
+follows without a reload.
 
 ```yaml
 # A plugin row may still configure the composition base layer, which is what a

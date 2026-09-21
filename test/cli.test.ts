@@ -36,8 +36,18 @@ test('the help text documents the contract a producer depends on', () => {
 test('every command the switch handles is named in the help text', () => {
   const source = readFileSync(new URL('../bin/dsh-progress.mjs', import.meta.url), 'utf8')
   const handled = [...source.matchAll(/^\s+case '([a-z]+)':/gm)].map(match => match[1])
-  assert.deepEqual([...handled].sort(), ['cancel', 'clear', 'done', 'emit', 'fail', 'list', 'path'])
+  assert.deepEqual([...handled].sort(), ['cancel', 'clear', 'done', 'emit', 'fail', 'list', 'path', 'run'])
   for (const command of handled) {
     assert.ok(HELP.includes(`dsh-progress ${String(command)}`), `help text does not document ${String(command)}`)
   }
+})
+
+test('the help text leads with the wrapper, because that is the cheap path', () => {
+  // One command line instead of a bespoke script: probe, parse, redirection,
+  // encoding and the terminal state are all the wrapper's problem. A model that
+  // has to synthesise a script per task pays for it every time, in round trips.
+  assert.match(HELP, /dsh-progress run --task <id>/)
+  assert.match(HELP, /-- <command>/)
+  // And the two things a script author gets wrong are stated as the wrapper's job.
+  assert.match(HELP, /exit code/)
 })

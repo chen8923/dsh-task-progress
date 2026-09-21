@@ -22,6 +22,21 @@ test('resolution is total: junk resolves to defaults, never a throw', () => {
   assert.deepEqual(resolveProgressSettings(null), CONFIG_DEFAULTS)
 })
 
+test('the unreported pill is off unless somebody asks for it', () => {
+  // Two facts in one field: an unconfigured deployment must not interrupt anyone
+  // for work nobody reported, and "false" has to be a real value rather than the
+  // same thing as "unset" — clearing the field returns it to the composition
+  // layer, which may well say true.
+  assert.equal(CONFIG_DEFAULTS.overlayUnreported, false)
+  assert.equal(resolveProgressSettings(undefined).overlayUnreported, false)
+  assert.equal(resolveProgressSettings({}).overlayUnreported, false)
+  assert.equal(resolveProgressSettings({ overlayUnreported: true }).overlayUnreported, true)
+  assert.equal(resolveProgressSettings({ overlayUnreported: false }).overlayUnreported, false)
+  // Anything that is not a boolean falls back, exactly as the numbers clamp.
+  assert.equal(resolveProgressSettings({ overlayUnreported: 'yes' }).overlayUnreported, false)
+  assert.equal(resolveProgressSettings({ overlayUnreported: 1 }).overlayUnreported, false)
+})
+
 test('resolution clamps out-of-range and mistyped values', () => {
   const resolved = resolveProgressSettings({
     dirName: '../evil',
@@ -64,6 +79,7 @@ test('a valid section survives resolution unchanged', () => {
     maxFileBytes: 8192,
     roots: ['/work'],
     remindAfterMs: 45_000,
+    overlayUnreported: true,
   }
   assert.deepEqual(resolveProgressSettings(section), section)
 })
@@ -82,7 +98,7 @@ test('the schema is callable, serializable, and structurally walkable', () => {
   const rootNode = refs[String(json.uid)]
   assert.equal(rootNode?.type, 'object')
   assert.deepEqual(Object.keys(rootNode?.dict ?? {}).sort(), [
-    'dirName', 'historyLimit', 'maxFileBytes', 'maxTasks', 'pollMs', 'remindAfterMs', 'retainMs', 'roots', 'scanMs',
+    'dirName', 'historyLimit', 'maxFileBytes', 'maxTasks', 'overlayUnreported', 'pollMs', 'remindAfterMs', 'retainMs', 'roots', 'scanMs',
   ])
   // Every node carries its meta object and every reference resolves to a node
   // that exists — the two things a partial envelope gets wrong.

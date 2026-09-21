@@ -9,6 +9,71 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ## [Unreleased]
 
+### Added
+
+- **`dsh-progress run` — wrap the command and stop writing producers.** Setting a
+  long task up used to cost a small program per task kind: probe the tool's
+  output, write a script that parses it, discover that stderr needs merging, get
+  the encoding right, add a BOM, syntax-check, launch. A real session spent six
+  round trips and seven stretches of reasoning on exactly that — before a
+  17-minute job had produced anything. One command replaces it:
+
+  ```
+  dsh-progress run --task sync-catalog -- python sync_catalog.py --task sync-catalog
+  ```
+
+  It announces the task, follows the command's output, reports a percentage when
+  it can read one (`12%` or `12/88` anywhere in a line, with `--pattern` for the
+  rest), relays that output to its own stdout, and writes the ending itself from
+  the exit code — non-zero is `failed`, a signal is `cancelled`, a clean exit is
+  `done` with a full bar. Reported percentages are passed through as printed; the
+  reader derives one from `done`/`total` rather than having two places compute it.
+  A change is reported and so is the passage of time (every 30 s), so a command
+  printing one unchanging line stops looking stalled without filling the file.
+  The task id lands in the command line by construction, which is the correlation
+  the settle below needs — and a wrapped command that is killed is settled from
+  its job record like any other producer.
+
+  The child's output is relayed through a **file descriptor, never a pipe**: a
+  shell running under DSH's sandbox cannot create the pipes a piped child needs
+  (`spawn` + `stdio: 'pipe'` → `EPERM`; the same spawn with a file descriptor
+  works — both measured here). The relay file is removed when the run ends, and
+  the test that covers this fails with `EPERM` if anyone ever simplifies it back
+  to a pipe.
+- **Two knobs in the settings panel, and a checkbox to render them.**
+  `remindAfterMs` was in the schema but hidden, which is the wrong place for a
+  number that spends the *model's* context: it is now editable, and `0` (never
+  remind) is stated as a legitimate answer. `overlayUnreported` is new: whether
+  the floating panel may appear for a background job whose script reports
+  nothing. The settings card learned a `toggle` kind for it — a checkbox whose
+  draft is `'true'`/`'false'`, with the row's own label as its accessible name,
+  and the reset control still meaning *inherit* rather than *off*.
+- `AGENTS.md` in the repository root: how work happens here. A fix starts with a
+  test that fails the way the report fails; a feature starts with its contract;
+  diagnosis runs the experiment first and leaves the probe in `notes/`; a green
+  suite is followed by breaking each load-bearing branch on purpose to confirm
+  the tests bite. The kill case and the pipe case are the worked examples.
+
+### Changed
+
+- **The floating panel no longer summons itself for work nobody reported for.**
+  Its amber pill used to appear whenever the only live work was a background job
+  with no progress reported — a widget that pops up to announce a missing report
+  is a summons nobody opted into, and the job was launched for the work, not for
+  this panel. Those rows are still in the sidebar tab, which a reader opens
+  deliberately, and the loud behaviour is now opt-in through
+  `overlayUnreported`. The wording changed with it: *"{n} background jobs running
+  (no progress reported)"* states a fact instead of sounding like a complaint.
+- **The prompt section leads with the wrapper.** It taught the raw protocol —
+  "append one JSON event per line, or run `emit`" — which is why a session that
+  followed it hand-wrote a producer and debugged PowerShell for six round trips.
+  The instruction now names `run --task` first, keeps the hand-written line as the
+  escape hatch, and stays inside its 800-character budget, because every session
+  pays for it.
+- `docs/PROTOCOL.md` gains **Wrapping a command instead of writing a producer**,
+  and the two settings above are documented where the rest of the configuration
+  is. The panel's empty state shows the wrapper first for the same reason.
+
 ### Fixed
 
 - **A task whose writer was killed no longer says `running` forever.** A task's

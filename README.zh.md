@@ -117,7 +117,13 @@ pwsh ./examples/simulate.ps1 -Task demo -Steps 30 -DelayMs 500
 
 ```markdown
 ## 长任务进度
-预计超过约 30 秒的命令，要在脚本内部把进度写进 `$DSH_PROGRESS_DIR/<task>.jsonl`
+预计超过约 30 秒的命令，**把它包起来**：
+
+```
+node "$env:DSH_PROGRESS_CLI" run --task <id> -- <你的命令>
+```
+
+它自己宣布任务、跟着命令的输出走、能读出百分比就报（行里出现 `12%` 或 `12/88` 都算），并按退出码写终态——不用写脚本，不用管重定向与编码，而且 task id 天然就在命令行里，这正是"这一行"与"那个 job"能对上号的原因。它表达不了的情况仍然可以手工上报：把进度写进 `$DSH_PROGRESS_DIR/<task>.jsonl`
 （每个事件一行 JSON，格式见 dsh-task-progress 的协议），或使用
 `node "$env:DSH_PROGRESS_CLI" emit --task <id> --pct N --msg "..."`。
 不要把进度文件读回来——它是给人看的。
@@ -156,10 +162,12 @@ pwsh ./examples/simulate.ps1 -Task demo -Steps 30 -DelayMs 500
 | 任务数上限 | `200` | 一次状态文档最多返回多少任务。 |
 | 单文件读取上限（字节） | `262144` | 每个进度文件从尾部读取的字节数。 |
 | 额外根目录 | – | 这些绝对路径下的 `.dsh-progress` 也会被扫描。 |
+| 未上报多久提醒模型（毫秒） | `30000` | 后台任务静默多久后，模型收到一次提醒。这一项花的是**模型的上下文**，所以放在面板上让你能调小；`0` 表示从不提醒。 |
+| 未上报任务也弹悬浮胶囊 | 关 | 脚本没有上报进度的后台任务，是否允许悬浮面板**主动弹出来**。默认关——它仍然列在右侧栏 tab 里。 |
 
-保存会把用户层写进 `$DSH_HOME/settings.yaml`；按「重置」（或清空某个字段后保存）会移除覆盖，值依次回落到插件行的 `config`、再到 schema 默认值。改动**实时生效**：新的扫描间隔会在下一拍重新定时，状态文档里的 `pollMs` 也会跟着变成浏览器该用的值。
+保存会把用户层写进 `$DSH_HOME/settings.yaml`；按「重置」（或清空某个字段后保存）会移除覆盖，值依次回落到插件行的 `config`、再到 schema 默认值。改动**实时生效**：新的扫描间隔会在下一拍重新定时，状态文档里的 `pollMs` 与 `overlayUnreported` 也会跟着变成浏览器该用的值。
 
-`dirName` **刻意不在面板里**——它已经写进了每一个路径，所以只作为插件行的组合层设置。`remindAfterMs` 同样在 schema 里但不出现在面板上：它就是一个数字、一个合理默认值，而另一个会被用到的值只有 `0`（关闭提醒）。
+`dirName` **刻意不在面板里**——它已经写进了每一个路径，所以只作为插件行的组合层设置。
 
 ## 设计
 
@@ -190,7 +198,7 @@ pwsh ./examples/simulate.ps1 -Task demo -Steps 30 -DelayMs 500
 ## 开发
 
 ```bash
-npm test              # 139 个测试，单进程（受限沙箱里也能跑）
+npm test              # 151 个测试，单进程（受限沙箱里也能跑）
 npm run test:runner   # 同一套测试走 node --test
 npm run build         # 需要 tsdown
 ```
@@ -203,9 +211,9 @@ src/host/              设置命名空间、store、环境变量贡献者、HTTP
 src/client/            轮询 store、格式化、设置表单、React 组件、slot、样式
 bin/dsh-progress.mjs   零依赖的生产者 CLI
 docs/PROTOCOL.md       文件协议与全部配置项
-test/                  十六套测试：协议、job 结算、store、格式化、宿主接线、设置、
-                       设置表单、提示词段、会话钩子、客户端 store、CLI、构建产物、
-                       设置卡片外观、隐私、发版一致性
+test/                  十七套测试：协议、job 结算、store、格式化、宿主接线、设置、
+                       设置表单、提示词段、会话钩子、客户端 store、CLI、包装器、
+                       构建产物、设置卡片外观、隐私、发版一致性
 tools/                 测试入口与构建/打包/安装脚本
 ```
 
@@ -214,7 +222,7 @@ tools/                 测试入口与构建/打包/安装脚本
 ### 发布
 
 ```bash
-npm test                                              # 139 项检查，单进程
+npm test                                              # 151 项检查，单进程
 git push && git tag v0.1.1 && git push origin v0.1.1   # 由 CI 发布，并带 provenance
 npm publish                                           # 手工兜底：先构建再发布
 ```

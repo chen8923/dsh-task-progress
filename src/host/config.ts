@@ -36,6 +36,14 @@ export interface TaskProgressConfig {
    * told once about it, milliseconds. `0` disables the reminder entirely.
    */
   readonly remindAfterMs: number
+  /**
+   * Whether the floating surface may summon itself for work nobody reported for.
+   *
+   * Off by default: a job that never promised to report should not pop a warning
+   * into the corner of the screen. Its row is still in the sidebar tab, which is
+   * a surface the user opens deliberately.
+   */
+  readonly overlayUnreported: boolean
 }
 
 /** The configuration every deployment gets when it configures nothing. */
@@ -49,6 +57,7 @@ export const CONFIG_DEFAULTS: TaskProgressConfig = {
   maxFileBytes: 256 * 1024,
   roots: [],
   remindAfterMs: 30_000,
+  overlayUnreported: false,
 }
 
 /** Directory names that are a single safe path segment. */
@@ -84,5 +93,10 @@ export function readConfig(raw: unknown): TaskProgressConfig {
     roots: roots.slice(0, 32),
     // Zero is a real value here: it is how a deployment turns the reminder off.
     remindAfterMs: bounded(record['remindAfterMs'], CONFIG_DEFAULTS.remindAfterMs, 0, 3_600_000),
+    // `false` is a real value too: it is the default, and clearing a toggle has
+    // to mean "inherit" rather than "off", so only a boolean is accepted.
+    overlayUnreported: typeof record['overlayUnreported'] === 'boolean'
+      ? record['overlayUnreported']
+      : CONFIG_DEFAULTS.overlayUnreported,
   }
 }

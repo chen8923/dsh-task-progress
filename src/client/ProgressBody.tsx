@@ -45,7 +45,11 @@ function EmptyState({ t, unreportedJobs }: { readonly t: Translate, readonly unr
         ? <span className="dtp-emptyRunning">{t('tab.emptyRunning', { count: unreportedJobs })}</span>
         : null}
       <span>{t('tab.emptyBody')}</span>
-      <pre className="dtp-code">{`node "$env:DSH_PROGRESS_CLI" emit --task build --pct 10 --msg "linking"
+      {/* The cheapest recipe first: wrapping a command is one line, and it is the
+          one a reader of an empty panel needs. The hand-written line stays below
+          it, because a panel that only taught the easy path would be lying about
+          what the protocol can express. */}
+      <pre className="dtp-code">{`node "$env:DSH_PROGRESS_CLI" run --task build -- <your long command>
 
 '{"v":1,"task":"build","state":"running","pct":42,"msg":"linking"}' |
   Add-Content -Encoding utf8 (Join-Path $env:DSH_PROGRESS_DIR build.jsonl)`}</pre>

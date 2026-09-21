@@ -6,7 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  createSettingsForm, decodeSettingsSection, listField, numberField,
+  createSettingsForm, decodeSettingsSection, listField, numberField, toggleField,
   type SettingsScopeLike, type ScopeSnapshotLike,
 } from '../src/client/settings-form.ts'
 
@@ -179,6 +179,35 @@ test('a rejected write keeps the drafts so the user can retry', async () => {
   assert.equal(read().user?.['pollMs'], undefined)
   assert.equal(form.getSnapshot().fields['pollMs']?.text, '4321')
   assert.equal(form.getSnapshot().failed, true)
+})
+
+test('a toggle stages on and off, and its reset means "inherit" rather than "off"', async () => {
+  const { scope, read } = fakeScope({ value: { overlayUnreported: false } })
+  const form = createSettingsForm(scope, [toggleField('overlayUnreported')])
+  // Seeded from the resolved value, so a checkbox has something to render.
+  assert.equal(form.getSnapshot().fields['overlayUnreported']?.text, 'false')
+  assert.equal(form.getSnapshot().fields['overlayUnreported']?.invalid, false, 'a toggle can never be invalid')
+
+  form.edit('overlayUnreported', 'true')
+  assert.equal(form.getSnapshot().dirty, true)
+  form.save()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(read().user?.['overlayUnreported'], true)
+
+  // Clearing the field is not the same act as switching it off: it removes the
+  // user layer so the composition's own value decides again.
+  const withBase = fakeScope({
+    value: { overlayUnreported: true },
+    base: { overlayUnreported: true },
+    user: { overlayUnreported: true },
+  })
+  const other = createSettingsForm(withBase.scope, [toggleField('overlayUnreported')])
+  assert.equal(other.getSnapshot().fields['overlayUnreported']?.overridden, true)
+  other.resetField('overlayUnreported')
+  other.save()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(withBase.read().user?.['overlayUnreported'], undefined)
+  assert.equal(other.getSnapshot().fields['overlayUnreported']?.text, 'true', 'the base layer shows through again')
 })
 
 test('a scope change re-projects an unedited field', () => {

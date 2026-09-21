@@ -27,8 +27,8 @@ const PROMPT_ORDER_FALLBACK = 1600
 /**
  * The convention, in as few words as it can be stated.
  *
- * Three things are load-bearing here, and each was learned from a session where
- * nothing appeared on the panel:
+ * Four things are load-bearing here, and each was learned from a session where
+ * nothing appeared on the panel — or where too much did:
  *
  * - It is **imperative**. The first version said long tasks *can* report, which
  *   reads as a capability note and was skipped; the model needs an instruction
@@ -37,6 +37,12 @@ const PROMPT_ORDER_FALLBACK = 1600
  *   first version never mentioned them.
  * - It names the **consequence**. "The user gets an empty panel" is what makes
  *   the instruction worth following rather than merely true.
+ * - It leads with the **wrapper**, because the cheapest recipe is the one the
+ *   model will take. A session that hand-wrote a producer spent six round trips
+ *   on setup — probing the tool's output, writing a script, fixing redirection
+ *   and encoding, syntax-checking — before any work started, and paid it again
+ *   for the next kind of command. `run` is one tool call, and the raw protocol is
+ *   still the escape hatch for what it cannot express.
  *
  * It stays short because every session pays for it, and it closes the one
  * failure the model would otherwise cause: reading the file back, which is the
@@ -45,12 +51,12 @@ const PROMPT_ORDER_FALLBACK = 1600
  */
 export function progressPromptText(): string {
   return 'For any command you expect to run longer than about 30 seconds — including a background job — report '
-    + 'live progress to the user: append one JSON event per update to `$DSH_PROGRESS_DIR/<task>.jsonl` '
-    + '(`{"v":1,"task":"build","state":"running","pct":40,"msg":"linking"}`; states are running/done/failed/cancelled, '
-    + '`done`/`total`/`unit` optional), or run '
-    + '`node "$DSH_PROGRESS_CLI" emit --task build --pct 40 --msg "linking"` (also `done`, `fail`, `list`). '
-    + 'Both variables exist in every shell call, and name the task after something recognisable in the command. '
-    + 'A long command that reports nothing leaves the user staring at an empty progress panel. '
+    + 'live progress by wrapping it: `node "$DSH_PROGRESS_CLI" run --task <id> -- <command>` (it announces the task, '
+    + 'follows the output, reads a percentage, and writes the ending from the exit code; the id must appear in that '
+    + 'command line). If that cannot express the task, append one JSON event per update to '
+    + '`$DSH_PROGRESS_DIR/<task>.jsonl` (`{"v":1,"task":"build","state":"running","pct":40,"msg":"linking"}`; states '
+    + 'running/done/failed/cancelled) or call `emit`/`done`/`fail`, naming the task after something recognisable in '
+    + 'the command. A long command that reports nothing leaves the user staring at an empty progress panel. '
     + 'Never read the progress file back — it is the human\'s view.'
 }
 

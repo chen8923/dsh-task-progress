@@ -23,17 +23,32 @@ import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type React
 import type { CardState } from './settings-form.ts'
 import type { Translate } from './locales.ts'
 
+/** Every field this card can draw. */
+type FieldName =
+  | 'scanMs' | 'pollMs' | 'retainMs' | 'historyLimit' | 'maxTasks' | 'maxFileBytes' | 'roots'
+  | 'remindAfterMs' | 'overlayUnreported'
+
 /** One control the card draws. */
 interface FieldSpec {
   /** Field name inside the settings section. */
-  readonly field: 'scanMs' | 'pollMs' | 'retainMs' | 'historyLimit' | 'maxTasks' | 'maxFileBytes' | 'roots'
-  /** Control kind: a single-line numeric box, or one line per list entry. */
-  readonly kind: 'number' | 'list'
+  readonly field: FieldName
+  /** Control kind: a numeric box, one line per list entry, or a checkbox. */
+  readonly kind: 'number' | 'list' | 'toggle'
 }
 
 /**
  * The fields this card edits, in reading order: how often the Host half looks,
- * how often the browser asks, and how much is kept.
+ * how often the browser asks, how much is kept — then the two knobs that are
+ * about other things and cost somebody something.
+ *
+ * `remindAfterMs` is here rather than hidden because it spends the *model's*
+ * context: a notice per silent job per step is a real cost, so the number that
+ * decides when it happens has to be visible to the person paying it. `0` is a
+ * legitimate value and means the reminder never happens.
+ *
+ * `overlayUnreported` is here for the opposite reason: the floating panel is the
+ * one surface that interrupts, and opting into that for work nobody reported for
+ * is a choice, not a default.
  *
  * `dirName` is deliberately absent: it is composition-level (it is part of every
  * path already written) and stays a plugin-row setting.
@@ -46,6 +61,8 @@ const FIELDS: readonly FieldSpec[] = [
   { field: 'maxTasks', kind: 'number' },
   { field: 'maxFileBytes', kind: 'number' },
   { field: 'roots', kind: 'list' },
+  { field: 'remindAfterMs', kind: 'number' },
+  { field: 'overlayUnreported', kind: 'toggle' },
 ]
 
 /** Props the slot binds for this card. */
@@ -150,18 +167,31 @@ function Field({
             onChange={(event) => { onEdit(event.target.value) }}
           />
         )
-        : (
-          <textarea
-            id={id}
-            className="dtp-setInput dtp-setTextarea"
-            rows={3}
-            spellCheck={false}
-            value={text}
-            disabled={disabled}
-            aria-invalid={invalid || undefined}
-            onChange={(event) => { onEdit(event.target.value) }}
-          />
-        )}
+        : spec.kind === 'toggle'
+          ? (
+            // The draft is the checkbox's state, and the row's own label is its
+            // accessible name, so there is no second label to keep in sync.
+            <input
+              id={id}
+              className="dtp-setToggle"
+              type="checkbox"
+              checked={text === 'true'}
+              disabled={disabled}
+              onChange={(event) => { onEdit(event.target.checked ? 'true' : 'false') }}
+            />
+          )
+          : (
+            <textarea
+              id={id}
+              className="dtp-setInput dtp-setTextarea"
+              rows={3}
+              spellCheck={false}
+              value={text}
+              disabled={disabled}
+              aria-invalid={invalid || undefined}
+              onChange={(event) => { onEdit(event.target.value) }}
+            />
+          )}
       <span className={invalid ? 'dtp-setHint dtp-setHintBad' : 'dtp-setHint'}>
         {invalid ? t('settings.invalid') : hint}
       </span>

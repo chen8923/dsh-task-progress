@@ -143,6 +143,16 @@ export interface ProgressState {
   readonly generatedAt: number
   /** Interval the browser half should poll at, milliseconds. */
   readonly pollMs: number
+  /**
+   * Whether the floating panel may appear for a background job whose script
+   * reports nothing.
+   *
+   * It rides this document rather than the settings transport because every
+   * surface already polls here, and a panel that had to fetch its own
+   * configuration before deciding whether to render would be a second data path
+   * to keep correct. Absent means false: never interrupt anybody by accident.
+   */
+  readonly overlayUnreported: boolean
   /** Every task the Host half currently sees. */
   readonly tasks: readonly ProgressTask[]
 }
@@ -255,6 +265,9 @@ export function parseState(text: string): ProgressState | null {
     v: typeof record['v'] === 'number' ? record['v'] : PROTOCOL_VERSION,
     generatedAt: nonNegative(record['generatedAt']) ?? Date.now(),
     pollMs: pollMs === null ? 2000 : Math.min(10_000, Math.max(500, pollMs)),
+    // Strictly `true`: a deployment that never configured this must not have its
+    // panel start summoning itself because a proxy echoed a truthy string.
+    overlayUnreported: record['overlayUnreported'] === true,
     tasks: tasks.map(parseTask).filter((task): task is ProgressTask => task !== null),
   }
 }

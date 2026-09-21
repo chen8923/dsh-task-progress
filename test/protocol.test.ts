@@ -123,6 +123,18 @@ test('parseState keeps an inferred ending, and refuses a baseless one', () => {
   assert.equal(byTask.get('no-job')?.state, 'cancelled')
 })
 
+test('parseState carries the client-facing knobs, including the overlay policy', () => {
+  // These ride the state document rather than the settings transport: every
+  // surface already polls this endpoint, and a browser half that must fetch its
+  // own configuration before it can decide whether to render is a second data
+  // path to keep correct.
+  const state = parseState(JSON.stringify({ v: 1, tasks: [], pollMs: 2000, overlayUnreported: true }))
+  assert.equal(state?.overlayUnreported, true)
+  // Absent or junk is off: never interrupt anybody by accident.
+  assert.equal(parseState('{"tasks":[]}')?.overlayUnreported, false)
+  assert.equal(parseState('{"tasks":[],"overlayUnreported":"yes"}')?.overlayUnreported, false)
+})
+
 test('parseState refuses anything it cannot trust', () => {
   for (const body of ['', 'nope', '[]', '{"tasks":"x"}', 'null']) {
     assert.equal(parseState(body), null, `expected null for ${JSON.stringify(body)}`)

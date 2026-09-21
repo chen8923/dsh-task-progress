@@ -128,6 +128,12 @@ export function resolveProgressSettings(candidate: unknown): ProgressSettings {
     maxFileBytes: integer(record['maxFileBytes'], CONFIG_DEFAULTS.maxFileBytes, 4096, 8 * 1024 * 1024),
     roots: rootList(record['roots']),
     remindAfterMs: integer(record['remindAfterMs'], CONFIG_DEFAULTS.remindAfterMs, 0, 3_600_000),
+    // A toggle is the one field where "unset" and "off" are different answers, so
+    // anything that is not a boolean resolves to the default rather than to a
+    // truthy reading of it.
+    overlayUnreported: typeof record['overlayUnreported'] === 'boolean'
+      ? record['overlayUnreported']
+      : CONFIG_DEFAULTS.overlayUnreported,
   }
 }
 
@@ -148,6 +154,13 @@ function fieldNodes(): Record<string, SchemaNodeLike> {
     maxFileBytes: numberNode(CONFIG_DEFAULTS.maxFileBytes, 4096, 8 * 1024 * 1024, 'Bytes read from the tail of one progress file.'),
     roots: { type: 'array', inner: { type: 'string', meta: {} }, meta: { default: [], description: 'Extra absolute roots to discover progress directories under.' } },
     remindAfterMs: numberNode(CONFIG_DEFAULTS.remindAfterMs, 0, 3_600_000, 'How long a background job may run silently before the model is told once.'),
+    overlayUnreported: {
+      type: 'boolean',
+      meta: {
+        default: CONFIG_DEFAULTS.overlayUnreported,
+        description: 'Whether the floating panel may appear for a background job whose script reports nothing.',
+      },
+    },
   }
 }
 

@@ -141,9 +141,18 @@ same instruction can live in your workspace `AGENTS.md`:
 
 ```markdown
 ## Long-running tasks
-For any command expected to run longer than ~30s, report progress from inside the
-script to `$DSH_PROGRESS_DIR/<task>.jsonl` (one JSON line per event, see the
-dsh-task-progress protocol), or use
+For any command expected to run longer than ~30s, wrap it:
+
+```
+node "$env:DSH_PROGRESS_CLI" run --task <id> -- <your command>
+```
+
+That announces the task, follows the output, reports a percentage when it can read
+one, and writes the ending from the exit code — no script to write, no redirection
+or encoding to get right, and the task id ends up in the command line, which is
+what ties the row to the job. Anything it cannot express can still report by hand:
+one JSON line per event to `$DSH_PROGRESS_DIR/<task>.jsonl` (see the
+dsh-task-progress protocol), or
 `node "$env:DSH_PROGRESS_CLI" emit --task <id> --pct N --msg "..."`.
 Never read the progress file back — it is for the human.
 ```
@@ -209,6 +218,8 @@ every plugin's are: **Settings → Plugins → Plugin configuration → Task pro
 | Max tasks | `200` | Cap on tasks in one state document. |
 | File tail bytes | `262144` | Bytes read from the tail of one progress file. |
 | Extra roots | – | Absolute paths whose `.dsh-progress` is scanned too. |
+| Remind the model after silence (ms) | `30000` | How long a background job may report nothing before the model is told once. This one spends the model's context, so it is here to be turned down; `0` never reminds. |
+| Float for jobs that report nothing | off | Whether the floating panel may appear for a job whose script reports no progress. Off by default — it is still listed in the sidebar tab. |
 
 Saving writes the namespace's user layer into `$DSH_HOME/settings.yaml`; pressing
 **Reset** (or emptying a field) removes the override, so the value falls back to
@@ -218,9 +229,6 @@ document's `pollMs` follows the value the browser should use.
 
 `dirName` is deliberately absent from the panel — it is part of every path
 already written, so it stays a composition-level setting on the plugin row.
-`remindAfterMs` is in the settings schema but not in the panel either: it is one
-number with one sensible default, and `0` (the reminder off) is the only other
-value anybody wants.
 
 ## Design
 
@@ -291,7 +299,7 @@ rehydrate a schema envelope at all.
 ## Development
 
 ```bash
-npm test          # 139 tests, one process (works in restricted sandboxes)
+npm test          # 151 tests, one process (works in restricted sandboxes)
 npm run test:runner   # the same suite through node --test
 npm run build         # requires tsdown
 ```
@@ -304,10 +312,10 @@ src/host/              settings namespace, store, shell-environment contributor,
 src/client/            polling store, formatting, settings form, React components, slots, styles
 bin/dsh-progress.mjs   the dependency-free producer CLI
 docs/PROTOCOL.md       the file contract and every configuration key
-test/                  sixteen suites: protocol, job reconciliation, store,
+test/                  seventeen suites: protocol, job reconciliation, store,
                        formatting, host wiring, settings, settings form, prompt
-                       section, session hook, client store, CLI, bundle, settings
-                       chrome, privacy, release
+                       section, session hook, client store, CLI, wrapper, bundle,
+                       settings chrome, privacy, release
 tools/                 test entry and the build/pack/install script
 ```
 
@@ -336,7 +344,7 @@ pull requests, which is where automation belongs.
 ### Releasing
 
 ```bash
-npm test                                  # 139 checks, one process
+npm test                                  # 151 checks, one process
 git push && git tag v0.1.1 && git push origin v0.1.1   # CI publishes it, with provenance
 npm publish                               # manual fallback: builds first, then publishes
 ```

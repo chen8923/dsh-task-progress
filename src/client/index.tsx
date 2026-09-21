@@ -25,7 +25,7 @@ import { ProgressOverlay } from './ProgressOverlay.tsx'
 import { SettingsCard } from './SettingsCard.tsx'
 import { TAB_KIND, taskProgressDefinition } from './definition.tsx'
 import { en, NS, zh, type Translate } from './locales.ts'
-import { createSettingsForm, decodeSettingsSection, listField, numberField, type FieldSpec, type SettingsForm, type SettingsSection } from './settings-form.ts'
+import { createSettingsForm, decodeSettingsSection, listField, numberField, toggleField, type FieldSpec, type SettingsForm, type SettingsSection } from './settings-form.ts'
 import { progressStore } from './store.ts'
 import { injectStyles } from './styles.ts'
 
@@ -48,6 +48,8 @@ const SETTINGS_FIELDS: readonly FieldSpec[] = [
   numberField('maxTasks'),
   numberField('maxFileBytes'),
   listField('roots'),
+  numberField('remindAfterMs'),
+  toggleField('overlayUnreported'),
 ]
 
 /** The slice of the client settings binder this plugin uses. */

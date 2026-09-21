@@ -479,6 +479,7 @@ export function createTaskStore(initial: TaskProgressConfig): TaskStore {
       v: PROTOCOL_VERSION,
       generatedAt: now,
       pollMs: config.pollMs,
+      overlayUnreported: config.overlayUnreported,
       tasks: all.slice(0, config.maxTasks).map(task => ({ ...task, recent: task.recent.slice(-WIRE_HISTORY) })),
     }
   }
