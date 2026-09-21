@@ -17,7 +17,7 @@ import {
 const job = (over: Partial<JobView> = {}): JobView => ({
   id: 'bash-1',
   kind: 'bash',
-  label: 'python backfill.py --task kline-backfill',
+  label: 'python sync_catalog.py --task sync-catalog',
   status: 'running',
   startedAt: 1_000,
   ...over,
@@ -38,9 +38,9 @@ test('a delegated agent is a job that never reports in this panel', () => {
 })
 
 test('a task name is recognised inside a command label, case aside', () => {
-  assert.equal(labelNamesTask('python backfill.py --task kline-backfill', 'kline-backfill'), true)
-  assert.equal(labelNamesTask('python Backfill.py --task KLINE-BACKFILL', 'kline-backfill'), true)
-  assert.equal(labelNamesTask('python backfill.py', 'kline-backfill'), false)
+  assert.equal(labelNamesTask('python sync_catalog.py --task sync-catalog', 'sync-catalog'), true)
+  assert.equal(labelNamesTask('python Sync_catalog.py --task SYNC-CATALOG', 'sync-catalog'), true)
+  assert.equal(labelNamesTask('python sync_catalog.py', 'sync-catalog'), false)
 })
 
 test('a name too short to be evidence is never matched', () => {

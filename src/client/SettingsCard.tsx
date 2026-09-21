@@ -11,12 +11,15 @@
  * row that looks like its neighbours but does not behave like them is worse than
  * one that looks different: the whole header is the toggle, it starts collapsed,
  * staged edits survive collapsing (so the header carries the unsaved marker),
- * and a successful save closes it again.
+ * and a successful save closes it again. Its *chrome* mirrors them just as
+ * closely, and for the same reason — see the `.dtp-set` block in `styles.ts`
+ * for where those values come from, and why they are transcribed rather than
+ * imported.
  *
  * @module dsh-task-progress/client/SettingsCard
  */
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { CardState } from './settings-form.ts'
 import type { Translate } from './locales.ts'
 
@@ -63,17 +66,28 @@ export interface SettingsCardProps {
   readonly discard: () => void
 }
 
-/** The glyph the header toggles with; inline so no icon package is needed. */
+/**
+ * The glyph the header toggles with, drawn as the icon the shipped cards use
+ * (`IconChevronDownOutline14`) rather than a chevron of this plugin's own: the
+ * outline is a filled path on a 14px grid, and a hand-drawn stroke next to it
+ * reads as a different weight at the same size. The package that exports the
+ * icon is not in the module table a browser half may require, so the path is
+ * carried here verbatim.
+ */
 function Chevron({ open }: { readonly open: boolean }): ReactNode {
   return (
     <svg
       className={open ? 'dtp-setChevron dtp-setChevronOpen' : 'dtp-setChevron'}
       width="14"
       height="14"
-      viewBox="0 0 16 16"
+      viewBox="0 0 14 14"
+      fill="none"
       aria-hidden="true"
     >
-      <path d="M4 6.5l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path
+        d="M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z"
+        fill="currentColor"
+      />
     </svg>
   )
 }
@@ -103,15 +117,24 @@ function Field({
         <label className="dtp-setLabel" htmlFor={id}>
           {t(`settings.${spec.field}` as Parameters<Translate>[0])}
         </label>
-        {overridden ? <span className="dtp-setOverride">{t('settings.overridden')}</span> : null}
-        <button
-          type="button"
-          className="dtp-setReset"
-          disabled={disabled || !overridden}
-          onClick={onReset}
-        >
-          {t('settings.reset')}
-        </button>
+        {/* Badge and reset ride together, and only where an override stands:
+            there is nothing to reset in a field that has none, and a disabled
+            button on every row is noise the shipped cards do not have. */}
+        {overridden
+          ? (
+            <Fragment>
+              <span className="dtp-setOverride">{t('settings.overridden')}</span>
+              <button
+                type="button"
+                className="dtp-setReset"
+                disabled={disabled}
+                onClick={onReset}
+              >
+                {t('settings.reset')}
+              </button>
+            </Fragment>
+          )
+          : null}
       </div>
       {spec.kind === 'number'
         ? (
@@ -197,7 +220,7 @@ export function SettingsCard(props: SettingsCardProps): ReactNode {
         ? (
           <div className="dtp-setBody">
             {disabled
-              ? <p className="dtp-setNotice" role="status">{t('settings.readonly')}</p>
+              ? <p className="dtp-setReadonly" role="status">{t('settings.readonly')}</p>
               : null}
             <div className="dtp-setFields">
               {FIELDS.map((spec) => {

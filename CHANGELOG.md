@@ -9,6 +9,50 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ## [Unreleased]
 
+### Fixed
+
+- **The settings card now looks like the cards it sits among.** Every other row
+  in the plugin configuration section is a raised card with a visible hairline, a
+  16px corner, a 15px name over a 13px description, and controls on the house
+  scale. This one sat on the page layer with a dark-mode-thin border (6% white —
+  invisible in dark mode), a 14px corner, a 13px name, and inputs and buttons a
+  size down, so it read as an unconfigured row rather than as the fifth plugin in
+  the list. The chrome is now transcribed from the components DSH ships into that
+  very slot (`ui-settings-plugins`), because a plugin living outside the DSH
+  repository cannot import them — the browser half may require only the platform
+  modules the shell seeds — so the values are copied rather than approximated:
+  the same tokens, the same metrics, and the states a still screenshot cannot
+  show (the pointer's border, the focus ring, the open card's layer, the inverted
+  fill on the primary action, the neutral capsule on both the unsaved and the
+  overridden badge). Verified against a running DSH by comparing this card's
+  computed styles with a shipped card's, in both themes: the values are equal
+  now, where the resting fill and the border alpha previously were not.
+- **The per-field reset appears only where there is an override to reset.** It
+  was drawn disabled on all seven fields, which no shipped card does and which
+  made the panel noisier than its neighbours. Emptying a field and saving still
+  clears the override, and an overridden field still shows the badge and the
+  reset together, as its neighbours do.
+- **The code surfaces name the theme's code font.** They asked for
+  `--dsw-font-family-mono`, which this theme does not define
+  (`--ds-font-family-code` is the token), so the plugin's own stack was used —
+  one without CJK coverage on Windows, where a command line containing Chinese
+  renders in a fallback that the theme sheet deliberately avoids. The same
+  applies to `--dsw-alias-label-error`, which the shipped sheets reference and
+  this theme also does not define: the card's error text uses the error token the
+  theme does define, and the departure is noted in the sheet itself.
+- The settings card's disclosure glyph is now the icon the shipped cards use
+  (`IconChevronDownOutline14`, a filled path on a 14px grid) rather than a
+  hand-drawn stroke chevron, which rendered at a different weight in the same box.
+
+### Added
+
+- `test/settings-chrome.test.ts`: the card's chrome, pinned to the values of the
+  components it copies. It is the one part of this plugin whose correctness lives
+  in another repository, and it can neither be imported nor read from a test, so
+  the contract is recorded here — and checked rule by rule, because an unbounded
+  scan of the sheet happily finds the token it wants in some later rule and
+  passes while the rule under test is wrong.
+
 ## [0.1.1] — 2026-09-21
 
 ### Added

@@ -71,7 +71,7 @@ export function jobCanReport(job: JobView): boolean {
  *
  * This is the reconciliation heuristic, and it is deliberately one-directional:
  * a script that names its task after something in its own command line (the
- * usual `--task kline-backfill` for `backfill.py`) is recognised, and anything
+ * usual `--task sync-catalog` for `sync_catalog.py`) is recognised, and anything
  * less obvious is treated as *not* reported. A false negative costs one extra
  * reminder or one extra grey row; a false positive would hide a job the user is
  * waiting on, which is the failure this whole plugin exists to fix.

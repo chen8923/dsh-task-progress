@@ -18,7 +18,7 @@ import {
 const job = (over: Partial<JobView> = {}): JobView => ({
   id: 'bash-1',
   kind: 'bash',
-  label: 'python backfill.py',
+  label: 'python sync_catalog.py',
   status: 'running',
   startedAt: 0,
   ownerSession: 'session-1',
@@ -56,8 +56,8 @@ test('a settled job, a delegated agent, and a job with no start time are never d
 
 test('a job the scripts already report for is left alone', () => {
   const now = 100_000
-  const candidate = job({ label: 'python backfill.py --task kline-backfill', startedAt: 0 })
-  assert.deepEqual(dueForReminder([candidate], reporting('kline-backfill'), now, 30_000, new Set()), [])
+  const candidate = job({ label: 'python sync_catalog.py --task sync-catalog', startedAt: 0 })
+  assert.deepEqual(dueForReminder([candidate], reporting('sync-catalog'), now, 30_000, new Set()), [])
   assert.deepEqual(
     dueForReminder([candidate], reporting('something-else'), now, 30_000, new Set()).map(entry => entry.id),
     ['bash-1'],
@@ -76,12 +76,12 @@ test('zero disables the reminder rather than meaning "immediately"', () => {
 })
 
 test('the notice forbids the one destructive reading it could invite', () => {
-  const text = reminderText([job({ label: 'python backfill.py' })], 30_000)
+  const text = reminderText([job({ label: 'python sync_catalog.py' })], 30_000)
   assert.match(text, /Do not restart a job that is already running/)
   assert.match(text, /progress panel shows nothing/)
   assert.match(text, /\$DSH_PROGRESS_DIR/)
   assert.match(text, /1 min/, 'the threshold is quoted in minutes')
-  assert.match(text, /bash-1 \(python backfill\.py\)/)
+  assert.match(text, /bash-1 \(python sync_catalog\.py\)/)
 })
 
 test('the notice bounds itself: three labels, then a count', () => {

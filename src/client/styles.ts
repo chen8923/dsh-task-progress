@@ -4,9 +4,14 @@
  * A standalone client bundle has no CSS-module toolchain behind it and the
  * loader transports no stylesheets, so the module body injects its own `<style>`
  * (which the module system then claims for this plugin id). Every selector is
- * `dtp-` prefixed, and the only shared surface used is the theme's `--dsw-*`
- * custom properties — the same intentional seam the shipped client plugins use,
- * which is what makes this panel follow light/dark themes for free.
+ * `dtp-` prefixed, and the only shared surface used is the theme's custom
+ * properties (`--dsw-alias-*`, and the `--ds-font-family-code` stack) — the same
+ * intentional seam the shipped client plugins use, which is what makes this
+ * panel follow light/dark themes for free.
+ *
+ * The settings card is the one block with a counterpart in DSH itself, and it is
+ * held to that counterpart's values rather than to this file's older tastes; see
+ * the comment above `.dtp-set`.
  */
 
 /** Marks the injected sheet so the module loader can attribute it to this plugin. */
@@ -289,7 +294,7 @@ const CSS = `
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2, rgba(128, 128, 128, 0.08));
   color: var(--dsw-alias-label-secondary, #a9a9b2);
-  font-family: var(--dsw-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   line-height: 16px;
   white-space: pre;
@@ -326,7 +331,7 @@ const CSS = `
 .dtp-jobLabel {
   overflow: hidden;
   color: var(--dsw-alias-label-primary, #e8e8ea);
-  font-family: var(--dsw-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -356,29 +361,58 @@ const CSS = `
    identical — telling those two apart is the whole point of the row group. */
 .dtp-pillWarn { color: var(--dsw-alias-state-warn-primary, #d29922); }
 
-/* ---- settings card, inside DSH's plugin configuration section ---- */
+/* ---- settings card, inside DSH's plugin configuration section ----
+
+   The chrome is transcribed value-for-value from the cards DSH ships into this
+   same slot (packages/client/ui-settings-plugins, PluginCard.module.css and
+   fields.module.css, at DSH 0.1.5-rc.2), because a plugin living outside
+   the DSH repository cannot import them: the browser half may only require the
+   platform words the shell seeds, and the UI primitives are not among them.
+   So this card is not "inspired by" its neighbours, it paints with their
+   tokens, their metrics, and their states — including the ones that only show
+   up on hover, on focus, and while a card is open. A row that looks like its
+   neighbours but fills, borders, or sizes itself differently is the defect this
+   block exists to remove: the theme tokens are the shared surface, and nothing
+   else may stand in for them.
+
+   Two deliberate departures, each marked below:
+   - error text uses the theme's state-error token, because the
+     --dsw-alias-label-error the shipped sheet names is not defined by this
+     theme, so referencing it paints nothing at all;
+   - the roots list is a textarea, a control this section has no other instance
+     of: it is styled as a shipped input with room for several lines. */
 
 .dtp-set {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  list-style: none;
   margin: 0;
-  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin, rgba(128, 128, 128, 0.25));
-  border-radius: 14px;
-  background: var(--dsw-alias-bg-layer-1, rgba(128, 128, 128, 0.06));
-  color: var(--dsw-alias-label-primary, #e8e8ea);
-  font-size: 13px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 16px;
+  background: var(--dsw-alias-bg-layer-3);
+  transition: border-color 0.16s, background 0.16s;
+}
+
+.dtp-set:hover { border-color: var(--dsw-alias-label-dimmed); }
+
+/* An open card reads as the one being worked on, not merely taller. */
+.dtp-setOpen {
+  background: var(--dsw-alias-bg-layer-2);
+  border-color: var(--dsw-alias-label-dimmed);
 }
 
 /* The header is the disclosure toggle, exactly as the shipped cards are: the
-   whole row is the button, so the gesture is the same everywhere. */
+   whole row is the button, so the gesture is the same everywhere. It carries no
+   hover fill of its own — the card's border is what answers the pointer. */
 .dtp-setHeader {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 12px 14px;
+  appearance: none;
+  padding: 14px 16px;
   border: 0;
+  border-radius: 12px;
   background: none;
   color: inherit;
   font: inherit;
@@ -386,50 +420,61 @@ const CSS = `
   cursor: pointer;
 }
 
-.dtp-setHeader:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.08)); }
+.dtp-setHeader:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
 
 .dtp-setHeadText {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
 .dtp-setChevron {
   flex: none;
-  color: var(--dsw-alias-label-tertiary, #8b8b95);
-  transition: transform 160ms ease;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform 0.16s;
 }
 
 .dtp-setChevronOpen { transform: rotate(180deg); }
 
 .dtp-setBody {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 2px 14px 14px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  margin: 0 16px;
+  padding-bottom: 8px;
 }
 
-.dtp-setTitle { font-weight: 600; }
+.dtp-setTitle {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--dsw-alias-label-primary);
+}
 
 .dtp-setDescription {
-  color: var(--dsw-alias-label-tertiary, #8b8b95);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
 }
 
+/* Fields the way the shipped cards lay their own out: each one pads itself and
+   a hairline separates it from the one above, so the body needs no gap. */
 .dtp-setFields {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
 .dtp-setField {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
+  padding: 12px 0;
 }
+
+.dtp-setField + .dtp-setField { border-top: 0.5px solid var(--dsw-alias-border-l2); }
 
 .dtp-setLabelRow {
   display: flex;
@@ -437,120 +482,175 @@ const CSS = `
   gap: 8px;
 }
 
-.dtp-setLabel { color: var(--dsw-alias-label-secondary, #a9a9b2); }
-
-/* The unsaved marker the collapsed header carries, and the per-field override
-   badge — the same shape, two different facts. */
-.dtp-setPending,
-.dtp-setOverride {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--dsw-alias-interactive-bg-hover, rgba(128, 128, 128, 0.16));
-  font-size: 11px;
-  line-height: 16px;
+.dtp-setLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
 }
 
-.dtp-setPending { color: var(--dsw-alias-label-secondary, #a9a9b2); }
-.dtp-setOverride { color: var(--dsw-alias-state-business-primary, #4f8cff); }
+/* The unsaved marker the collapsed header carries, and the per-field override
+   badge — the same shape, two different facts. Geometry and palette are the
+   shipped Tag at its neutral tone, which is what a card in this section
+   draws for both. */
+.dtp-setPending,
+.dtp-setOverride {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 17px;
+  white-space: nowrap;
+}
 
+/* A reset exists only where there is an override to reset, so this is a text
+   control and never a bordered one. */
 .dtp-setReset {
-  margin-left: auto;
-  padding: 2px 8px;
-  border: 1px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.3));
-  border-radius: 6px;
+  flex: none;
+  padding: 0;
+  border: 0;
   background: none;
-  color: var(--dsw-alias-label-secondary, #a9a9b2);
+  color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: 12px;
+  line-height: 1.5;
   cursor: pointer;
 }
 
-.dtp-setReset:disabled { opacity: 0.4; cursor: default; }
-.dtp-setReset:not(:disabled):hover { color: var(--dsw-alias-label-primary, #e8e8ea); }
+.dtp-setReset:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
+.dtp-setReset:disabled { cursor: default; }
 
 .dtp-setInput {
   box-sizing: border-box;
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.3));
+  height: 34px;
+  padding: 0 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 8px;
-  background: var(--dsw-specific-input-major, rgba(128, 128, 128, 0.08));
-  color: var(--dsw-alias-label-primary, #e8e8ea);
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 13px;
+  line-height: 1.5;
 }
 
-.dtp-setInput:focus {
-  border-color: var(--dsw-alias-state-business-primary, #4f8cff);
+.dtp-setInput:focus-visible {
+  border-color: var(--dsw-alias-brand-primary);
   outline: none;
 }
 
-.dtp-setInput[aria-invalid] { border-color: var(--dsw-alias-state-error-primary, #e5534b); }
+.dtp-setInput:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+
+/* A departure: the shipped sheet names --dsw-alias-label-error, which this
+   theme does not define — so it paints nothing there. This is the error token
+   the theme does define. */
+.dtp-setInput[aria-invalid] { border-color: var(--dsw-alias-state-error-primary); }
 
 .dtp-setTextarea {
+  height: auto;
   min-height: 62px;
+  padding: 8px 12px;
   resize: vertical;
-  font-family: var(--dsw-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 12px;
 }
 
 .dtp-setHint {
-  color: var(--dsw-alias-label-tertiary, #8b8b95);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
 }
 
-.dtp-setHintBad { color: var(--dsw-alias-state-error-primary, #e5534b); }
+.dtp-setHintBad { color: var(--dsw-alias-state-error-primary); }
 
+/* Right-aligned actions under a hairline, as every shipped card ends. */
 .dtp-setFoot {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  padding: 12px 0 4px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .dtp-setFootText {
   display: flex;
+  flex: 1;
   gap: 8px;
-  margin-right: auto;
+  min-width: 0;
 }
 
+.dtp-setDiscard,
 .dtp-setSave {
+  appearance: none;
   padding: 5px 14px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--dsw-alias-state-business-primary, #4f8cff);
-  color: #ffffff;
   font: inherit;
   font-size: 13px;
+  line-height: 1.5;
   cursor: pointer;
 }
-
-.dtp-setSave:disabled { opacity: 0.45; cursor: default; }
 
 .dtp-setDiscard {
-  padding: 5px 12px;
-  border: 1px solid var(--dsw-alias-border-l2, rgba(128, 128, 128, 0.3));
-  border-radius: 8px;
+  border-color: var(--dsw-alias-border-l2);
   background: none;
-  color: var(--dsw-alias-label-secondary, #a9a9b2);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
 }
 
-.dtp-setDiscard:disabled { opacity: 0.4; cursor: default; }
-.dtp-setDiscard:not(:disabled):hover { color: var(--dsw-alias-label-primary, #e8e8ea); }
+.dtp-setDiscard:hover:not(:disabled) {
+  border-color: var(--dsw-alias-label-dimmed);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* The house primary: inverted fill, not an accent colour of its own. */
+.dtp-setSave {
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-layer-3);
+}
+
+.dtp-setDiscard:disabled,
+.dtp-setSave:disabled { opacity: 0.4; cursor: default; }
+
+.dtp-setDiscard:focus-visible,
+.dtp-setSave:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
 
 .dtp-setNotice {
-  color: var(--dsw-alias-label-tertiary, #8b8b95);
   font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
 }
 
-.dtp-setNoticeBad { color: var(--dsw-alias-state-error-primary, #e5534b); }
+/* A namespace that accepts no writes says so once, above the fields. */
+.dtp-setReadonly {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.dtp-setNoticeBad {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-state-error-primary);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .dtp-fill { transition: none; }
+  .dtp-set { transition: none; }
   .dtp-setChevron { transition: none; }
   .dtp-fill[data-indeterminate],
   .dtp-spinner { animation: none; }
