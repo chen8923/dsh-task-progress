@@ -58,6 +58,10 @@ The version here, in `package.json`, and in both READMEs is checked by
   progress — a capability note — and never mentioned background jobs, which is
   where long work actually goes. It now says what to do, when, and what the user
   sees if it is skipped.
+- **Developer notes are local now** (`.gitignore`), and the planning note that
+  had been committed is gone from the tree. A note is written for one machine and
+  one moment; `docs/` ships inside the package, so anything meant for readers
+  belongs in `docs/`, the READMEs, or here.
 
 ### Fixed
 

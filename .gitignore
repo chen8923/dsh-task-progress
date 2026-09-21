@@ -26,3 +26,10 @@ Thumbs.db
 .npmrc
 .env
 .env.*
+
+# Developer notes — plans, checklists, session handoffs — are local. They are
+# written for one machine and one moment, they name local paths, and `docs/`
+# ships inside the package while this must not: keeping them untracked is what
+# stops a note from becoming a published artifact. Anything worth keeping for
+# readers belongs in docs/, README.md, or the changelog.
+notes/
