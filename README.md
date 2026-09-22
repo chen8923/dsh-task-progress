@@ -334,6 +334,13 @@ confirm `test/bundle.test.ts` still passes, and commit `lib/` in the same commit
 Everything else (the workflows' actions, the lockfile) still gets its automatic
 pull requests, which is where automation belongs.
 
+**`screenshots.json` is marketplace metadata, not a build input.** Plugin
+directories and dsh-market show the UI capture it names on a plugin's detail
+page, and the convention is that the repository declares it rather than the
+list: 1–8 paths relative to this file, none leaving the plugin directory. It
+changes nothing at runtime, and the image it names is the one `docs/` already
+ships.
+
 ### Releasing
 
 ```bash

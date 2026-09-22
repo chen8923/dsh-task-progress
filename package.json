@@ -42,6 +42,7 @@
     "lib/client.js.map",
     "bin/dsh-progress.mjs",
     "cordis.patch.yml",
+    "screenshots.json",
     "docs",
     "examples",
     "CHANGELOG.md",
