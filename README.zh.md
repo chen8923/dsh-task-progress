@@ -2,7 +2,7 @@
 
 **DeepSeek Harness 长任务实时进度。** 脚本把结构化进度写进文件，Web 界面用**悬浮窗**和**右侧栏 tab**展示——不用问 agent，也不用等命令跑完。
 
-**版本 0.1.1** · MIT · [English](README.md) · [更新日志](CHANGELOG.md)
+**版本 0.2.0** · MIT · [English](README.md) · [更新日志](CHANGELOG.md)
 
 ![一个真实会话里的悬浮面板：任务名、进度条、消息、已用时间、单位计数与预计剩余](docs/overlay.png)
 
@@ -218,7 +218,7 @@ tools/                 测试入口与构建/打包/安装脚本
 
 ```bash
 npm test                                              # 165 项检查，单进程
-git push && git tag v0.1.1 && git push origin v0.1.1   # 由 CI 发布，并带 provenance
+git push && git tag v0.2.0 && git push origin v0.2.0   # 由 CI 发布，并带 provenance
 npm publish                                           # 手工兜底：先构建再发布
 ```
 

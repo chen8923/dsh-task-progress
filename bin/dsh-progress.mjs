@@ -572,7 +572,7 @@ export async function run() {
     process.exit(0)
   }
   if (command === '--version' || command === '-v') {
-    process.stdout.write('dsh-progress 0.1.1\n')
+    process.stdout.write('dsh-progress 0.2.0\n')
     process.exit(0)
   }
 

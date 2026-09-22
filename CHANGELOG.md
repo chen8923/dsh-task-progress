@@ -9,6 +9,8 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-22
+
 ### Security
 
 - **`--pattern` can no longer wedge a wrapped command.** The flag takes a regular
@@ -343,5 +345,6 @@ First release, so these are properties rather than changes:
 - No runtime dependencies, no `postinstall`, no network calls from either half,
   and no HTML injection surface in the browser half.
 
+[0.2.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.2.0
 [0.1.1]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.1
 [0.1.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.0
