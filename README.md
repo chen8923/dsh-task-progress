@@ -292,7 +292,7 @@ rehydrate a schema envelope at all.
 ## Development
 
 ```bash
-npm test          # 165 tests, one process (works in restricted sandboxes)
+npm test          # 168 tests, one process (works in restricted sandboxes)
 npm run test:runner   # the same suite through node --test
 npm run build         # requires tsdown
 ```
@@ -344,7 +344,7 @@ ships.
 ### Releasing
 
 ```bash
-npm test                                  # 165 checks, one process
+npm test                                  # 168 checks, one process
 git push && git tag v0.2.0 && git push origin v0.2.0   # CI publishes it, with provenance
 npm publish                               # manual fallback: builds first, then publishes
 ```

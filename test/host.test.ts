@@ -150,10 +150,13 @@ test('apply() settles a killed writer over the route it serves', async () => {
         replace: async () => {},
       }),
     },
-    // Keyed by the session the progress directory is named after.
-    agents: { get: (sessionId: string) => sessionId === 'session-1' ? { id: sessionId } : undefined },
+    // Keyed by the session the progress directory is named after — and the
+    // caller is that session **id**, which is what the registry's own filter
+    // (`job.owner.id === caller`) compares. No `agents` fake: the registry takes
+    // the session directly now, so the plugin no longer has to resolve one to
+    // the other.
     jobs: {
-      list: (agent: { id: string }) => agent.id === 'session-1'
+      list: (caller?: string) => caller === 'session-1'
         ? [{
             id: 'pwsh-7',
             kind: 'pwsh',
@@ -311,8 +314,10 @@ test('apply() wires the route, the environment, the settings namespace, and the 
   assert.equal(watched, 1)
   assert.equal(contributors, 1)
   assert.deepEqual(listeners, ['agent/pre-step'], 'the reminder listens to the step it can still influence')
-  // Six effects: settings changes, environment, route, scan loop, prompt
-  // section, and the reminder. Disposing them unregisters everything.
+  // Seven effects: settings changes, environment, route, scan loop, prompt
+  // section, the reminder, and the settle source. Disposing them unregisters
+  // everything. The settle source is wired from `jobs` alone: this fake has no
+  // `agents`, which is exactly the composition the new registry makes possible.
   for (const dispose of disposers) dispose()
   assert.deepEqual(routes, [])
   assert.deepEqual(sections, [])

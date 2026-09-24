@@ -39,8 +39,15 @@ const MAX_LABEL_CHARS = 60
 
 /** The slice of `ctx.jobs` this plugin uses: snapshots, never `read()`. */
 export interface JobsLike {
-  /** List the caller's own visible jobs, as fresh non-consuming snapshots. */
-  list(caller?: unknown): readonly JobView[]
+  /**
+   * List the calling session's visible jobs, as fresh non-consuming snapshots.
+   *
+   * The caller is a **session id**, not the agent that owns it: the registry
+   * filters on `job.owner.id === caller`, so a caller it cannot match is
+   * answered with the unowned jobs alone — which for a session's own work means
+   * nothing at all.
+   */
+  list(caller?: string): readonly JobView[]
 }
 
 /** The slice of the task store the reminder consults. */
@@ -99,7 +106,7 @@ function liveTaskNames(store: ReportedSource, now: number, sessionId: string | u
  * @returns true when the job should be left alone.
  */
 function isCovered(job: JobView, store: ReportedSource, now: number): boolean {
-  const names = liveTaskNames(store, now, job.ownerSession)
+  const names = liveTaskNames(store, now, job.owner)
   return names.some(name => labelNamesTask(job.label, name))
 }
 
@@ -231,9 +238,15 @@ export function registerProgressReminder(
       if (!(threshold > 0)) return decision
       const agent = payload?.agent
       if (typeof agent !== 'object' || agent === null) return decision
+      // The registry is asked as a session, and an agent's `id` *is* its session
+      // id — the same value its jobs carry in `owner`. Without one there is no
+      // question to ask, and guessing would only produce a wrong answer: a
+      // caller the registry cannot match sees unowned jobs alone.
+      const caller = typeof (agent as { id?: unknown }).id === 'string' ? (agent as { id: string }).id : undefined
+      if (caller === undefined) return decision
 
       const now = Date.now()
-      const snapshots = jobs.list(agent)
+      const snapshots = jobs.list(caller)
       const already = mentioned.get(agent) ?? new Set<string>()
       // Forget ids that are no longer live, so the memory cannot grow with the
       // session's job history.

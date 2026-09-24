@@ -9,6 +9,24 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ## [Unreleased]
 
+### Fixed
+
+- **Both features that read the job registry now ask it the way the host answers.**
+  `ctx.jobs.list(caller)` used to be handed the agent that owns a job; it now
+  compares its caller against `job.owner.id`, a session id, so an agent object
+  matched nothing and the registry replied with the unowned jobs alone — which for
+  a session's own work means an empty list. Neither reader failed loudly, so both
+  went **silent**: a task whose writer was killed stayed `running` for good, and the
+  reminder for an unreported job never fired again. The registry is now asked as
+  the session id, which also removed the agent-registry lookup the settle used to
+  bridge a session to its agent.
+- **A job's owning session is read under the registry's own field name.** It is
+  `owner` on `@deepseek-ai/dsh-jobs/view`, not `ownerSession`; under the old name
+  it is `undefined` on every job, and the coverage rule would then turn inside out
+  — every live job would look unreported, and the reminder would nag about work
+  that is reporting perfectly well. Fixing the caller alone would have made this
+  worse rather than better, which is why the two land together.
+
 ## [0.2.0] — 2026-09-22
 
 ### Security

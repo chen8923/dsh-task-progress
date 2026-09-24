@@ -35,8 +35,15 @@ export interface JobView {
   readonly startedAt?: number
   /** Epoch ms the job settled; absent while it is live. */
   readonly finishedAt?: number
-  /** Owning session id, present on registry snapshots and absent from the mirror. */
-  readonly ownerSession?: string
+  /**
+   * Owning session id, absent on an unowned job.
+   *
+   * Spelled `owner` because that is the registry's own field
+   * (`@deepseek-ai/dsh-jobs/view`): it is what `list(caller)` compares a caller
+   * against, so a projection reading it under another name sees `undefined` on
+   * every job and every live job then looks unreported.
+   */
+  readonly owner?: string
 }
 
 /** The two live statuses, spelled the same by the registry and the mirror. */

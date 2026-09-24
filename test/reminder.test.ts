@@ -21,7 +21,9 @@ const job = (over: Partial<JobView> = {}): JobView => ({
   label: 'python sync_catalog.py',
   status: 'running',
   startedAt: 0,
-  ownerSession: 'session-1',
+  // The registry's own field name, matching `@deepseek-ai/dsh-jobs/view`:
+  // `owner` is the owning session id, absent on an unowned job.
+  owner: 'session-1',
   ...over,
 })
 
@@ -35,6 +37,25 @@ const reporting = (task: string) => ({
     generatedAt: 0,
     pollMs: 2000,
     tasks: [{ sessionId: 'session-1', task, state: 'running', pct: 10, msg: '', at: 0, done: null, total: null, unit: null, history: [] }],
+  }),
+})
+
+/**
+ * A store that answers only for the session it is asked about.
+ *
+ * `silent` and `reporting` ignore their session argument, which is fine for the
+ * rules they pin — but it would hide a projection reading the wrong field name,
+ * so the coverage rules below are judged against this one.
+ */
+const reportingOnly = (sessionId: string, task: string) => ({
+  snapshot: (_now?: number, asked?: string): ProgressState => ({
+    v: 1,
+    sessionId,
+    generatedAt: 0,
+    pollMs: 2000,
+    tasks: asked === sessionId
+      ? [{ sessionId, task, state: 'running', pct: 10, msg: '', at: 0, done: null, total: null, unit: null, history: [] }]
+      : [],
   }),
 })
 
@@ -62,6 +83,26 @@ test('a job the scripts already report for is left alone', () => {
     dueForReminder([candidate], reporting('something-else'), now, 30_000, new Set()).map(entry => entry.id),
     ['bash-1'],
     'an unrelated report does not cover this job',
+  )
+})
+
+test('coverage is judged against the job owner the registry reports', () => {
+  // The field the registry spells `owner` is the session the reported task
+  // belongs to. Read under any other name it is always undefined, the task store
+  // is then asked about no session at all, and every live job looks uncovered —
+  // the reminder would nag for work that is reporting perfectly well.
+  const now = 100_000
+  const covered = job({ label: 'python sync_catalog.py --task sync-catalog', startedAt: 0 })
+  assert.deepEqual(
+    dueForReminder([covered], reportingOnly('session-1', 'sync-catalog'), now, 30_000, new Set()),
+    [],
+    'a task reported by the job owner covers it',
+  )
+  assert.deepEqual(
+    dueForReminder([job({ owner: 'session-2', label: 'python sync_catalog.py --task sync-catalog', startedAt: 0 })],
+      reportingOnly('session-1', 'sync-catalog'), now, 30_000, new Set()).map(entry => entry.id),
+    ['bash-1'],
+    'another session publishing the same task name does not cover this job',
   )
 })
 
@@ -136,12 +177,40 @@ function fakeHost(): { ctx: AgentLoopLike, calls: number, fire: (payload: PreSte
   }
 }
 
-const jobsOf = (list: readonly JobView[]): JobsLike => ({ list: () => list })
+/**
+ * A registry standing in for `ctx.jobs`, with the caller filter the real one has.
+ *
+ * `JobRegistry.list(caller?: SessionId)` answers the calling *session*: an owned
+ * job is visible only when `job.owner.id === caller`, and a caller it does not
+ * recognise sees unowned jobs alone. The fake therefore answers only for the id
+ * below, so a caller that hands over anything else — an agent object, say — is
+ * answered with nothing, exactly as the registry would.
+ */
+const jobsOf = (list: readonly JobView[]): JobsLike => ({
+  list: (caller?: string) => caller === 'session-1' ? list : [],
+})
+
+test('the registry is asked as the calling session, which is what its filter compares', async () => {
+  const seen: unknown[] = []
+  const host = fakeHost()
+  registerProgressReminder(host.ctx, { list: (caller?: string) => { seen.push(caller); return [] } }, silent, 30_000)
+  await host.fire({ agent: AGENT, messages: [] })
+  assert.deepEqual(seen, ['session-1'], 'the caller is the session id the registry compares against job.owner.id')
+})
+
+test('a step whose agent carries no session is left alone rather than asked with nothing', async () => {
+  const seen: unknown[] = []
+  const host = fakeHost()
+  registerProgressReminder(host.ctx, { list: (caller?: string) => { seen.push(caller); return [] } }, silent, 30_000)
+  const decision = await host.fire({ agent: {}, messages: [] })
+  assert.deepEqual(decision.messages, [{ id: 'user-1' }], 'the step keeps exactly the messages it already had')
+  assert.deepEqual(seen, [], 'the registry is never consulted without a session to ask about')
+})
 
 test('the listener delegates first and changes nothing when no job is due', async () => {
   const host = fakeHost()
   registerProgressReminder(host.ctx, jobsOf([]), silent, 30_000)
-  const decision = await host.fire({ agent: {}, messages: [] })
+  const decision = await host.fire({ agent: AGENT, messages: [] })
   assert.equal(host.calls, 1, 'the downstream decision is taken exactly once')
   assert.deepEqual(decision.messages, [{ id: 'user-1' }])
 })
@@ -158,7 +227,7 @@ test('the listener appends one notice, and only once per job', async () => {
 test('a rejected step is returned untouched', async () => {
   const host = fakeHost()
   registerProgressReminder(host.ctx, jobsOf([job({ startedAt: 0 })]), silent, 30_000)
-  const decision = await host.fire({ agent: {} }, { kind: 'reject' })
+  const decision = await host.fire({ agent: AGENT }, { kind: 'reject' })
   assert.equal(decision.kind, 'reject')
   assert.equal(decision.messages, undefined, 'a veto is not ours to decorate')
 })
@@ -174,14 +243,14 @@ test('anything failing on our side leaves the step exactly as it was', async () 
   const throwingJobs: JobsLike = { list() { throw new Error('registry gone') } }
   const host = fakeHost()
   registerProgressReminder(host.ctx, throwingJobs, silent, 30_000)
-  const decision = await host.fire({ agent: {}, messages: [] })
+  const decision = await host.fire({ agent: AGENT, messages: [] })
   assert.equal(host.calls, 1)
   assert.deepEqual(decision.messages, [{ id: 'user-1' }])
 
   const throwingStore = { snapshot(): ProgressState { throw new Error('store gone') } }
   const other = fakeHost()
   registerProgressReminder(other.ctx, jobsOf([job({ startedAt: 0 })]), throwingStore, 30_000)
-  const second = await other.fire({ agent: {}, messages: [] })
+  const second = await other.fire({ agent: AGENT, messages: [] })
   assert.deepEqual(second.messages, [{ id: 'user-1' }], 'a broken store is not a broken step')
 })
 
