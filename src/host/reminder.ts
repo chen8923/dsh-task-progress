@@ -13,8 +13,11 @@
  *
  * Three properties matter more than the feature:
  *
- * 1. **It can never break a step.** Everything is wrapped: the downstream
- *    decision is taken first and returned unchanged on any failure of ours.
+ * 1. **It can never break a step from inside.** Everything is wrapped: the
+ *    downstream decision is taken first and returned unchanged on any failure of
+ *    ours. What the wrapper cannot cover is the harness refusing the notice
+ *    afterwards: V4 rejects a retired source kind at the append, which fails the
+ *    very step the notice rode on — so that kind is pinned by its own test.
  * 2. **It never vetoes.** The listener delegates, then optionally appends. A
  *    composition without `jobs` simply never registers it.
  * 3. **It speaks once per job, and only about old ones.** The notice costs
@@ -190,6 +193,15 @@ export function reminderText(jobs: readonly JobView[], afterMs: number): string 
  * a `user` role onto the given content and source. The shape is reproduced here
  * rather than imported, because importing a DSH package would put a second
  * dependency in a plugin whose whole installation story is "zero dependencies".
+ *
+ * The kind is the one attribute not to reproduce from memory. Since session format
+ * V4 the writer admits only a producer-owned kind, and the retired
+ * `{ kind: 'plugin' }` wrapper is refused **at the append** — "format v4 message
+ * requires a producer-owned source kind" — which fails the step that carried the
+ * notice instead of dropping the notice. `plugin:<package>` is the kind DSH's own
+ * V3→V4 migration stamps on a notice from a producer outside the harness, so it is
+ * also the one to write here: a log spanning the cutover then holds one identity
+ * for this plugin rather than two.
  * @param text - the notice body.
  * @returns a frozen message DSH can carry into the next step.
  */
@@ -198,8 +210,7 @@ export function createReminderMessage(text: string): {
   readonly role: 'user'
   readonly content: readonly { readonly type: 'text', readonly text: string }[]
   readonly source: {
-    readonly kind: 'plugin'
-    readonly plugin: string
+    readonly kind: 'plugin:dsh-task-progress'
     readonly form: 'notice'
     readonly summary: string
   }
@@ -210,8 +221,7 @@ export function createReminderMessage(text: string): {
     role: 'user' as const,
     content: Object.freeze([Object.freeze({ type: 'text' as const, text })]),
     source: Object.freeze({
-      kind: 'plugin' as const,
-      plugin: 'dsh-task-progress',
+      kind: 'plugin:dsh-task-progress' as const,
       form: 'notice' as const,
       summary,
     }),

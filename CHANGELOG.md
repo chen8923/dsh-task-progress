@@ -7,7 +7,7 @@ All notable changes to this plugin are recorded here. The format follows
 The version here, in `package.json`, and in both READMEs is checked by
 `test/release.test.ts`, so they cannot drift apart.
 
-## [Unreleased]
+## [0.2.1] — 2026-09-24
 
 ### Added
 
@@ -42,6 +42,19 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ### Fixed
 
+- **The reminder's notice is admitted by the session log again.** DSH moved its
+  session format to V4, and the V4 writer refuses a message whose source is the
+  retired `{ kind: 'plugin' }` wrapper: `format v4 message requires a producer-owned
+  source kind`. It refuses it **at the append**, so the notice did not quietly go
+  missing — the model step that carried it failed, which is what a user running any
+  session with a background job silent past 30 s saw as a failed turn. The notice now
+  declares its own kind, `plugin:dsh-task-progress`, which is also the kind DSH's own
+  V3→V4 migration stamps on a notice from a producer outside the harness, so a log
+  spanning the cutover keeps **one** identity for this plugin instead of two. The claim
+  that the reminder "can never break a step" was a claim about our own `try`/`catch`,
+  not about DSH's admission; the module note now says which is which, and the kind is
+  pinned by `test/reminder.test.ts` — every other field of the message can be read off
+  `createUserMessage`, and this one cannot.
 - **The memory bound is named the way the code names it, and the suite size is stated
   once.** The `Memory` row in both READMEs and in `SECURITY.md` named `fileTailBytes`,
   which no code has: the ceiling is `maxFileBytes`, as `config.ts` and `PROTOCOL.md`
@@ -492,6 +505,7 @@ First release, so these are properties rather than changes:
 - No runtime dependencies, no `postinstall`, no network calls from either half,
   and no HTML injection surface in the browser half.
 
+[0.2.1]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.2.1
 [0.2.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.2.0
 [0.1.1]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.1
 [0.1.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.0

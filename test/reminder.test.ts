@@ -174,12 +174,18 @@ test('a long command label is truncated rather than quoted whole', () => {
   assert.match(text, /…/)
 })
 
-test('the injected message is shaped the way DSH makes user messages', () => {
+test('the injected message carries a producer-owned source the session log accepts', () => {
   const message = createReminderMessage('hello')
   assert.equal(message.role, 'user')
   assert.equal(message.id.length, 36, 'a uuid, like createUserMessage stamps')
+  // DSH's released-V4 admission refuses `{ kind: 'plugin' }` — "format v4 message
+  // requires a producer-owned source kind" — and it refuses it **at the append**, so
+  // the step that carried the notice fails instead of the notice being dropped. The
+  // kind DSH's own V3→V4 migration gives a third-party producer is namespaced, which
+  // is therefore the kind this plugin has to write itself.
+  assert.notEqual(message.source.kind, 'plugin', 'the plugin wrapper is retired in V4')
   assert.deepEqual(message.source, {
-    kind: 'plugin', plugin: 'dsh-task-progress', form: 'notice', summary: 'hello',
+    kind: 'plugin:dsh-task-progress', form: 'notice', summary: 'hello',
   })
   assert.deepEqual(message.content, [{ type: 'text', text: 'hello' }])
   assert.notEqual(createReminderMessage('hello').id, message.id, 'every notice has its own identity')
