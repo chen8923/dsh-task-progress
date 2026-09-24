@@ -397,19 +397,21 @@ const CSS = `
    identical — telling those two apart is the whole point of the row group. */
 .dtp-pillWarn { color: var(--dsw-alias-state-warn-primary, #d29922); }
 
-/* ---- settings card, inside DSH's plugin configuration section ----
+/* ---- settings form, inside DSH's Plugins page ----
 
-   The chrome is transcribed value-for-value from the cards DSH ships into this
-   same slot (packages/client/ui-settings-plugins, PluginCard.module.css and
-   fields.module.css, at DSH 0.1.5-rc.2), because a plugin living outside
-   the DSH repository cannot import them: the browser half may only require the
-   platform words the shell seeds, and the UI primitives are not among them.
-   So this card is not "inspired by" its neighbours, it paints with their
-   tokens, their metrics, and their states — including the ones that only show
-   up on hover, on focus, and while a card is open. A row that looks like its
-   neighbours but fills, borders, or sizes itself differently is the defect this
-   block exists to remove: the theme tokens are the shared surface, and nothing
-   else may stand in for them.
+   The page draws the card: its title, its icon, its description line, and the
+   disclosure that opens it. What this plugin contributes is the one-liner under
+   that title and the form in the card's body — so there is deliberately no card
+   rule in this block, and its absence is asserted. An earlier version painted a
+   complete card into both answers; the page then showed two identical boxes, and
+   because that card's own disclosure started collapsed, the form never rendered.
+
+   What remains is the form, transcribed value-for-value from the controls the
+   shipped settings pages use (packages/client/ui-settings-plugins,
+   fields.module.css, at DSH 0.1.5-rc.2), because a plugin living outside the DSH
+   repository cannot import them: the browser half may only require the platform
+   words the shell seeds, and the UI primitives are not among them. The theme
+   tokens are the shared surface, and nothing else may stand in for them.
 
    Two deliberate departures, each marked below:
    - error text uses the theme's state-error token, because the
@@ -417,84 +419,6 @@ const CSS = `
      theme, so referencing it paints nothing at all;
    - the roots list is a textarea, a control this section has no other instance
      of: it is styled as a shipped input with room for several lines. */
-
-.dtp-set {
-  display: flex;
-  flex-direction: column;
-  list-style: none;
-  margin: 0;
-  border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 16px;
-  background: var(--dsw-alias-bg-layer-3);
-  transition: border-color 0.16s, background 0.16s;
-}
-
-.dtp-set:hover { border-color: var(--dsw-alias-label-dimmed); }
-
-/* An open card reads as the one being worked on, not merely taller. */
-.dtp-setOpen {
-  background: var(--dsw-alias-bg-layer-2);
-  border-color: var(--dsw-alias-label-dimmed);
-}
-
-/* The header is the disclosure toggle, exactly as the shipped cards are: the
-   whole row is the button, so the gesture is the same everywhere. It carries no
-   hover fill of its own — the card's border is what answers the pointer. */
-.dtp-setHeader {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  appearance: none;
-  padding: 14px 16px;
-  border: 0;
-  border-radius: 12px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.dtp-setHeader:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
-  outline-offset: -2px;
-}
-
-.dtp-setHeadText {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.dtp-setChevron {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  transition: transform 0.16s;
-}
-
-.dtp-setChevronOpen { transform: rotate(180deg); }
-
-.dtp-setBody {
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-  margin: 0 16px;
-  padding-bottom: 8px;
-}
-
-.dtp-setTitle {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: var(--dsw-alias-label-primary);
-}
-
-.dtp-setDescription {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--dsw-alias-label-tertiary);
-}
 
 /* Fields the way the shipped cards lay their own out: each one pads itself and
    a hairline separates it from the one above, so the body needs no gap. */
@@ -699,8 +623,6 @@ const CSS = `
 
 @media (prefers-reduced-motion: reduce) {
   .dtp-fill { transition: none; }
-  .dtp-set { transition: none; }
-  .dtp-setChevron { transition: none; }
   .dtp-fill[data-indeterminate],
   .dtp-spinner { animation: none; }
 }

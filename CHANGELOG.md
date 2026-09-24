@@ -42,6 +42,18 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ### Fixed
 
+- **The Plugins page shows one settings card again, and the form it opens actually
+  renders.** That page draws the card itself — title, icon, description line and the
+  disclosure that opens it — and asks the entry twice by contract: `summary` for the
+  one-liner under the title, `page` for the body of the plugin's own page. This card
+  ignored the view and painted a complete card into both answers, so the page showed
+  two identical boxes, and because that card's own disclosure started collapsed the
+  form never rendered at all — no knob on that page could be edited. It now answers
+  the two views the way DSH's own settings pages do, and draws no card chrome of its
+  own; the rule that painted it is gone from the sheet rather than left dead. Measured
+  on the live page: two identical description lines and no form before, one line and
+  ten field rows after. The drift that let it through was in the module's own note,
+  which still described the pre-0.1.7 `settings.plugin.item` slot.
 - **The reminder's notice is admitted by the session log again.** DSH moved its
   session format to V4, and the V4 writer refuses a message whose source is the
   retired `{ kind: 'plugin' }` wrapper: `format v4 message requires a producer-owned
