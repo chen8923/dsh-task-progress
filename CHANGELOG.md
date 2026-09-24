@@ -26,6 +26,26 @@ The version here, in `package.json`, and in both READMEs is checked by
   — every live job would look unreported, and the reminder would nag about work
   that is reporting perfectly well. Fixing the caller alone would have made this
   worse rather than better, which is why the two land together.
+- **The floating overlay comes back.** It asked the session list which session was
+  in view through a `current` field that 0.1.7 removed, so the answer was
+  `undefined` forever and the surface rendered nothing at all. The session in view
+  is the row the **main view retains** — the same judgement DSH's own document
+  title and workspace browser make — and the whole client half was reading a
+  session list that no longer carries a current selection.
+- **The settings card returns to the Plugins page.** It registered into
+  `settings.plugin.item`, which 0.1.7 no longer declares, and bound its values
+  through `settingsScope`, which is no longer a service — both silent, both
+  leaving an empty space where the card used to be. It now registers into
+  `plugins.item` while the settings domain serves its namespace
+  (`ctx.configForms.whileServed`) and takes its values from `ctx.configForms`.
+- **Background jobs that report nothing are listed again.** The browser-side job
+  mirror left the session list; the rows now come from `ctx.jobs`, whose snapshot
+  has to be **watched per session** (`watchRows`) — reading it without watching
+  answers with nothing for a session that has jobs.
+- The client half's session and job seams are now pinned by
+  `test/client-contract.test.ts`, which asserts the **names** this plugin writes
+  and DSH reads. Every breakage above was a rename that produced no error at all:
+  the plugin kept running and simply stopped drawing.
 
 ## [0.2.0] — 2026-09-22
 

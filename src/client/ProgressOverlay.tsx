@@ -20,8 +20,9 @@ import { unreportedJobs } from '../jobs.ts'
 import type { ProgressState } from '../protocol.ts'
 import { countRunning, headlineTask, overlayPolicy, selectTasks } from './format.ts'
 import { JobGroup } from './JobList.tsx'
+import { useJobRoster, useLiveJobs } from './job-roster.ts'
 import type { Translate } from './locales.ts'
-import { useCurrentSession, useSessionJobs, type SessionsHook } from './session-hook.ts'
+import { useCurrentSession, type RosterSlot, type SessionsHook } from './session-hook.ts'
 import { TaskRow } from './TaskList.tsx'
 import { useNow, useProgress } from './useProgress.ts'
 
@@ -31,21 +32,29 @@ export interface ProgressOverlayProps {
   readonly t: Translate
   /** Standard slot prop: the sessions store. Absent only outside the shell. */
   readonly useSessions?: SessionsHook
+  /**
+   * The client job roster, when `ctx.jobs` has loaded.
+   *
+   * Optional on purpose: the overlay's own data is what scripts reported, and it
+   * must still draw in a deployment (or a moment) where DSH's job service is not
+   * there. Losing the roster costs the unreported rows, not the surface.
+   */
+  readonly roster?: RosterSlot
 }
 
 /**
  * The floating progress overlay.
- * @param props - the translator and the session selector hook.
+ * @param props - the translator, the session selector hook, and the job roster.
  * @returns the pill (or expanded card), or null when nothing is worth showing.
  */
-export function ProgressOverlay({ t, useSessions }: ProgressOverlayProps): ReactNode {
+export function ProgressOverlay({ t, useSessions, roster: rosterSlot }: ProgressOverlayProps): ReactNode {
   const current = useCurrentSession(useSessions)
   const state: ProgressState | null = useProgress(current)
   const [open, setOpen] = useState(false)
   const tick = (state?.tasks.length ?? 0) > 0
   const now = useNow(1000, tick)
   const tasks = selectTasks(state, current, now, 'active')
-  const jobs = unreportedJobs(useSessionJobs(useSessions, current), tasks.map(task => task.task))
+  const jobs = unreportedJobs(useLiveJobs(useJobRoster(rosterSlot), current), tasks.map(task => task.task))
   const policy = overlayPolicy({
     reported: tasks.length,
     unreported: jobs.length,

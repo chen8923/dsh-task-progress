@@ -14,8 +14,9 @@ import { unreportedJobs } from '../jobs.ts'
 import type { ProgressState } from '../protocol.ts'
 import { countRunning, formatClock, selectTasks } from './format.ts'
 import { JobGroup } from './JobList.tsx'
+import { useJobRoster, useLiveJobs, useLiveJobCount } from './job-roster.ts'
 import type { Translate } from './locales.ts'
-import { useRunningJobCount, useSessionJobs, type SessionsHook } from './session-hook.ts'
+import type { RosterSlot, SessionsHook } from './session-hook.ts'
 import { TaskRow } from './TaskList.tsx'
 import { useNow, useProgress } from './useProgress.ts'
 
@@ -27,6 +28,8 @@ export interface ProgressBodyProps {
   readonly sessionId?: string
   /** Standard slot prop: the sessions store, for the unreported-job hint. */
   readonly useSessions?: SessionsHook
+  /** The client job roster, when `ctx.jobs` has loaded; absent loses only the job rows. */
+  readonly roster?: RosterSlot
 }
 
 /**
@@ -63,15 +66,16 @@ function EmptyState({ t, unreportedJobs }: { readonly t: Translate, readonly unr
  * @param props - the translator, this tab's session, and the session selector hook.
  * @returns the list, or the empty state that documents the contract.
  */
-export function ProgressBody({ t, sessionId, useSessions }: ProgressBodyProps): ReactNode {
+export function ProgressBody({ t, sessionId, useSessions, roster: rosterSlot }: ProgressBodyProps): ReactNode {
   const state: ProgressState | null = useProgress(sessionId)
-  const unreportedCount = useRunningJobCount(useSessions, sessionId)
+  const roster = useJobRoster(rosterSlot)
+  const unreportedCount = useLiveJobCount(roster, sessionId)
   const tick = (state?.tasks.length ?? 0) > 0
   const now = useNow(1000, tick)
   const tasks = selectTasks(state, sessionId, now, 'all')
   // Coverage is judged against every task this session has reported, finished
   // ones included: a job whose script reported and then exited was reported.
-  const jobs = unreportedJobs(useSessionJobs(useSessions, sessionId), tasks.map(task => task.task))
+  const jobs = unreportedJobs(useLiveJobs(roster, sessionId), tasks.map(task => task.task))
 
   if (tasks.length === 0 && jobs.length === 0) return <EmptyState t={t} unreportedJobs={unreportedCount} />
 
