@@ -22,12 +22,14 @@
  *   dsh-progress fail --task build --msg "link error"
  *   dsh-progress path [--task build]
  *   dsh-progress list
+ *   dsh-progress watch [--task build] [--once]
  *   dsh-progress clear --task build
  */
 
 import { spawn } from 'node:child_process'
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 
@@ -52,7 +54,8 @@ Usage:
   dsh-progress fail  --task <id> [--msg TEXT]
   dsh-progress cancel --task <id> [--msg TEXT]
   dsh-progress path  [--task <id>]
-  dsh-progress list
+  dsh-progress list  [--task <id>]
+  dsh-progress watch [--task <id>] [--interval MS] [--once]
   dsh-progress clear --task <id>
   dsh-progress --help | --version
 
@@ -87,6 +90,20 @@ Where the file goes:
   it can append to any path you can write (creating parent directories), and
   "clear --file" removes one. Pass it only from a script whose arguments you
   control; prefer --task, which cannot leave the progress directory.
+
+Watching a run instead of asking again:
+  dsh-progress watch [--task <id>] [--interval MS] [--once]
+  It follows the directory and prints a task the first time it sees one, then only
+  when that task's reading actually changes — so a long run scrolls at the pace of
+  the work, not at the pace of the clock. It reads files rather than a process,
+  which is what lets it watch work another shell started. Nothing is written and
+  nothing needs settling: Ctrl+C is the whole teardown.
+
+  --interval MS  how often the directory is re-read (default 1000, floor 200)
+  --once         one pass and exit. It prints exactly what "list" prints, with the
+                 clock left off, so a script can read it; --task narrows either one
+                 to a single task, and "list --task" is the same read without the
+                 follow.
 
 Examples:
   node "$env:DSH_PROGRESS_CLI" emit --task build --pct 10 --msg "linking"
@@ -522,18 +539,47 @@ function lastEvent(path) {
   return null
 }
 
-/** Print every task currently reporting in the directory. */
-function list(options) {
+/* ------------------------------------------------------------------ *
+ * list and watch: the two readers
+ *
+ * Both print the same row — task, percentage, state, message — folded from the
+ * last event each file holds. `list` prints it once; `watch` prints it as it
+ * changes. Sharing the fold is the point: a watcher whose idea of "changed"
+ * disagreed with what `list` shows would announce a difference the reader cannot
+ * see, which is worse than not watching at all.
+ * ------------------------------------------------------------------ */
+
+/** The file name a `--task` filter names, or null when none was given. */
+function filterOf(options) {
+  if (options.task === undefined) return null
+  // The same rule `fileOf` applies. A filter names a file, so an id that could
+  // not name one is a typo worth reporting, not an empty listing.
+  if (!TASK_RE.test(options.task)) fail(`invalid task id ${JSON.stringify(options.task)}: use 1-40 of A-Z a-z 0-9 . _ -`)
+  return `${options.task}${SUFFIX}`
+}
+
+/**
+ * One row per reporting task, folded from the last event in each file.
+ *
+ * `rows: null` is deliberately not the same as an empty list: a missing directory
+ * says progress reporting was never configured, while a directory holding nothing
+ * says no task is running. The two get different sentences, and the difference is
+ * the whole reason this returns the directory alongside the rows.
+ * @param options - `dir`, and the optional `task` filter.
+ * @returns the directory and its rows, or the directory with `rows: null`.
+ */
+export function rowsOf(options) {
   const dir = directoryOf(options)
+  const only = filterOf(options)
   let names
   try {
     names = readdirSync(dir).filter(name => name.endsWith(SUFFIX))
   } catch {
-    process.stdout.write(`(no progress directory at ${dir})\n`)
-    return
+    return { dir, rows: null }
   }
   const rows = []
   for (const name of names.sort()) {
+    if (only !== null && name !== only) continue
     const event = lastEvent(join(dir, name))
     if (event === null) continue
     rows.push({
@@ -543,13 +589,107 @@ function list(options) {
       msg: typeof event.msg === 'string' ? event.msg : '',
     })
   }
+  return { dir, rows }
+}
+
+/** One row as a line of text, aligned to a width the caller already measured. */
+export function formatRow(row, width) {
+  return `${row.task.padEnd(width)}  ${row.pct.padStart(4)}  ${row.state.padEnd(9)}  ${row.msg}`
+}
+
+/** The clock `watch` prefixes a change with, so scrollback says when it moved. */
+function stamp(now = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+}
+
+/**
+ * One row as it is printed, which depends on whether a line is a read or a follow.
+ *
+ * A clock on every line of a stream is what tells a reader when something moved; the
+ * same clock on a single read is noise a script would have to strip. So a single
+ * pass prints exactly what `list` prints, and that agreement is the contract this
+ * function exists to hold in one place.
+ * @param row - the folded row to print.
+ * @param width - the alignment the caller measured across all rows.
+ * @param following - true when more lines may follow this one.
+ * @returns the line, without its newline.
+ */
+export function lineFor(row, width, following) {
+  return following ? `${stamp()}  ${formatRow(row, width)}` : formatRow(row, width)
+}
+
+/**
+ * Whether two readings of one task say the same thing to a reader.
+ *
+ * `watch` prints by this, so it is the difference between a line per update and a
+ * line per tick. A task seen for the first time is always news: `undefined` is not
+ * a reading that agrees with anything.
+ * @param before - the row printed last time, or undefined for a task just seen.
+ * @param after - the row just read.
+ * @returns true when there is nothing new to print.
+ */
+export function sameRow(before, after) {
+  if (before === undefined || after === undefined) return before === after
+  return before.task === after.task
+    && before.pct === after.pct
+    && before.state === after.state
+    && before.msg === after.msg
+}
+
+/** Print every task currently reporting in the directory. */
+function list(options) {
+  const { dir, rows } = rowsOf(options)
+  if (rows === null) {
+    process.stdout.write(`(no progress directory at ${dir})\n`)
+    return
+  }
   if (rows.length === 0) {
     process.stdout.write(`(no tasks reported in ${dir})\n`)
     return
   }
   const width = Math.max(...rows.map(row => row.task.length))
-  for (const row of rows) {
-    process.stdout.write(`${row.task.padEnd(width)}  ${row.pct.padStart(4)}  ${row.state.padEnd(9)}  ${row.msg}\n`)
+  for (const row of rows) process.stdout.write(`${formatRow(row, width)}\n`)
+}
+
+/** How often `watch` looks again by default, and how often it may. */
+const WATCH_EVERY_MS = 1000
+const WATCH_MIN_MS = 200
+
+/**
+ * Follow the directory and print a row whenever a task's reading changes.
+ *
+ * The alternative is asking `list` again by hand, which costs a round trip per
+ * look and reports the same row every time. This reads the files rather than a
+ * process, so a task another shell started shows up here too.
+ *
+ * It writes nothing, so there is nothing to settle and Ctrl+C is the whole
+ * teardown — no ending to emit, no file to close.
+ */
+async function watch(options) {
+  const interval = numberFlag(options.interval, 'interval', WATCH_MIN_MS, 60_000) ?? WATCH_EVERY_MS
+  let previous = new Map()
+  for (;;) {
+    const { dir, rows } = rowsOf(options)
+    if (rows === null) {
+      process.stdout.write(`(no progress directory at ${dir})\n`)
+      return
+    }
+    if (rows.length === 0 && options.once === true) {
+      process.stdout.write(`(no tasks reported in ${dir})\n`)
+      return
+    }
+    const width = Math.max(0, ...rows.map(row => row.task.length))
+    for (const row of rows) {
+      // A task that was absent last tick has no previous row, and `sameRow` calls
+      // that news — which is how a watcher announced before it existed still gets
+      // its opening line.
+      if (sameRow(previous.get(row.task), row)) continue
+      process.stdout.write(`${lineFor(row, width, options.once !== true)}\n`)
+    }
+    previous = new Map(rows.map(row => [row.task, row]))
+    if (options.once === true) return
+    await sleep(interval)
   }
 }
 
@@ -602,6 +742,8 @@ export async function run() {
         json: { type: 'boolean' },
         help: { type: 'boolean' },
         every: { type: 'string' },
+        interval: { type: 'string' },
+        once: { type: 'boolean' },
         pattern: { type: 'string' },
         quiet: { type: 'boolean' },
         cwd: { type: 'string' },
@@ -659,6 +801,9 @@ export async function run() {
     case 'list':
       list(options)
       break
+    case 'watch':
+      await watch(options)
+      break
     case 'clear': {
       const path = targetOf(options)
       if (!existsSync(path)) fail(`no such file ${path}`)
@@ -670,7 +815,7 @@ export async function run() {
       break
     }
     default:
-      fail(`unknown command ${JSON.stringify(command)} (try: run, emit, done, fail, cancel, path, list, clear)`)
+      fail(`unknown command ${JSON.stringify(command)} (try: run, emit, done, fail, cancel, path, list, watch, clear)`)
   }
 }
 

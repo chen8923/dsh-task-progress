@@ -11,6 +11,22 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ### Added
 
+- **A task can be followed instead of asked about.** `dsh-progress watch` prints a
+  task the first time it sees one and then only when that task's reading actually
+  changes, so a long run scrolls at the pace of the work rather than at the pace of
+  the clock. It follows the files rather than a process, which is what lets it watch
+  work another shell started. `--once` is a single pass, and it prints exactly what
+  `list` prints — the clock belongs to a follow, not to a read — so a script can take
+  either; both readers accept `--task <id>` now, because they share the fold. Asking
+  `list` again by hand was the alternative to watching, at a round trip per look and
+  the same row back every time. The three pieces the suite can reach are the ones
+  that decide what a reader sees: the comparison that calls a change a change
+  (`sameRow`), the fold both readers share (`rowsOf`), and the line a read prints
+  versus a follow (`lineFor`). The CLI itself is never spawned from the suite — a
+  restricted sandbox forbids the pipes a child needs — which is exactly why those
+  three are exported and pure; the loop was driven for real instead, by
+  `notes/watch-smoke.mjs`, against the copy the model actually calls.
+
 - **A job that reports nothing now shows what it is printing.** The row for an
   unreported background job used to carry its command line, its state, and how
   long it had been running — enough to know that something was happening, not
