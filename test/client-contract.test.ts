@@ -145,3 +145,14 @@ test('the Config schema marks its root volatile, or the entry is skipped anyway'
     'the serialized root must carry the flag too',
   )
 })
+
+test('the Config schema speaks Standard Schema, which is how cordis validates config', () => {
+  // `cordis/src/fiber.ts:resolveConfig` is
+  // `runtime.Config['~standard'].validate(raw)`. Without `~standard` that reads
+  // `.validate` off `undefined`, and the loader throws **before `apply` runs** —
+  // the route, the environment, and both panels all vanish with no trace in the
+  // plugin's own output, which is exactly how the last two rounds presented.
+  const settings = code(read('src/host/settings.ts'))
+  assert.match(settings, /'~standard':/u, 'the schema must expose the Standard Schema face')
+  assert.match(settings, /validate: \(value: unknown\) =>/u, 'with a synchronous validate()')
+})

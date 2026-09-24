@@ -222,6 +222,23 @@ export function progressSchema(): SchemaLike<ProgressSettings> {
   const fields = fieldNodes()
   const schema = ((candidate: unknown) => resolveProgressSettings(candidate)) as SchemaLike<ProgressSettings>
   Object.assign(schema, { type: 'object', meta: { default: {}, volatile: true }, dict: fields })
+  // cordis validates a plugin's configuration through the Standard Schema
+  // protocol before `apply` ever runs — `fiber.ts:resolveConfig` is literally
+  // `runtime.Config['~standard'].validate(raw)`. A schema without it makes the
+  // loader throw `Cannot read properties of undefined (reading 'validate')`, and
+  // a plugin whose config cannot resolve never loads at all: no route, no
+  // environment, no panels, and nothing written where a reader would look. It
+  // cost this file two rounds of "the overlay disappeared"; the contract test
+  // below now pins it.
+  Object.assign(schema, {
+    '~standard': {
+      version: 1,
+      vendor: 'dsh-task-progress',
+      // The resolver is total by construction (it clamps a hand-edited document
+      // rather than refusing it), so validation cannot report issues.
+      validate: (value: unknown) => ({ value: resolveProgressSettings(value) }),
+    },
+  })
   schema.toJSON = () => envelopeOf(fields)
   return schema
 }

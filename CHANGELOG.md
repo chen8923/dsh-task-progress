@@ -60,6 +60,15 @@ The version here, in `package.json`, and in both READMEs is checked by
   plugin row's own `config` argument, and the browser half addresses the form by
   **entry id** (`dsh-task-progress`, the `id` in `cordis.patch.yml`) rather than by
   the runtime namespace. A contract test reads both files and fails if they drift.
+- **The plugin loads again: its `Config` now speaks Standard Schema.** cordis
+  resolves a plugin's configuration with `runtime.Config['~standard'].validate(raw)`
+  **before `apply` runs**. The exported schema had no `~standard` face, so the
+  loader threw `TypeError: Cannot read properties of undefined (reading 'validate')`
+  and the plugin never mounted at all — the state route answered 404, the shell
+  environment stopped injecting `DSH_PROGRESS_DIR`, and both panels disappeared
+  together, with nothing in the plugin's own output to read. Verified against
+  cordis's own `resolveConfig`, which now returns the resolved section; a contract
+  test pins the face.
 
 ## [0.2.0] — 2026-09-22
 
