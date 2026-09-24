@@ -3,9 +3,9 @@
  *
  * Five seams, each with exactly one job:
  *
- * 1. {@link registerProgressSettings} registers the settings namespace whose
- *    knobs the browser's configuration card edits, with this plugin row's own
- *    `config` as the composition base layer.
+ * 1. the `Config` schema this module exports is what the settings domain derives the
+ *    plugin's form from, with this plugin row's own `config` as the composition base
+ *    layer — there is no registration call since DSH 0.1.7.
  * 2. {@link registerProgressEnv} hands every session shell call a progress
  *    directory (`DSH_PROGRESS_DIR`) — the only thing a producer has to know.
  * 3. {@link createTaskStore} folds whatever lands in those directories.
@@ -27,7 +27,7 @@
 
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { STATE_ROUTE } from '../protocol.ts'
+import { STATE_ROUTE, SETTINGS_NAMESPACE } from '../protocol.ts'
 import { readConfig, type TaskProgressConfig } from './config.ts'
 import {
   DEFAULT_REMIND_AFTER_MS, registerProgressReminder,
@@ -40,9 +40,12 @@ import { createTaskStore, type SessionJobSource, type TaskStore } from './store.
 import { registerProgressPrompt, type SystemPromptLike } from './system-prompt.ts'
 
 export { CONFIG_DEFAULTS, readConfig, type TaskProgressConfig } from './config.ts'
+// `SETTINGS_NAMESPACE` is the pre-0.1.7 name and is re-exported for readers of an old
+// settings document; the settings surface itself comes from `Config` below.
+export { SETTINGS_NAMESPACE }
 export {
-  SETTINGS_NAMESPACE, progressSchema, registerProgressSettings, resolveProgressSettings,
-  type ProgressSettings, type SchemaLike, type SchemaNodeLike, type SettingsProviderLike, type SettingsScopeLike,
+  progressSchema, resolveProgressSettings,
+  type ProgressSettings, type SchemaLike, type SchemaNodeLike,
 } from './settings.ts'
 export { createTaskStore, type SessionJobSource, type StoreStats, type TaskStore } from './store.ts'
 export { PROGRESS_CLI_KEY, PROGRESS_DIR_KEY, registerProgressEnv, type ShellEnvLike } from './shell-env.ts'
@@ -81,7 +84,6 @@ export interface TaskProgressHostContext {
   inject(
     deps: readonly string[],
     callback: (scope: TaskProgressHostContext & {
-      readonly settings: SettingsProviderLike
       readonly systemPrompt: SystemPromptLike
       readonly jobs: JobsLike
     }) => void,

@@ -1,11 +1,11 @@
 /**
  * Host-side configuration, read defensively.
  *
- * This plugin deliberately exports no `Config` schema: a schema would make the
- * package depend on DSH's validation library, and the whole point of the layout
- * is that the plugin installs and builds with zero dependencies of its own.
- * Every key below has a default, so an unconfigured plugin row is fully
- * functional, and a wrong value is clamped rather than fatal.
+ * **This module owns the shape and the defaults, not the schema.** The `Config` the
+ * plugin entry exports is assembled by hand in `settings.ts`, and that is what keeps
+ * the package free of DSH's validation library. Every key below has a default, so an
+ * unconfigured plugin row is fully functional, and a wrong value is clamped rather
+ * than fatal.
  *
  * @module dsh-task-progress/host/config
  */

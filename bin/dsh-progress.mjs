@@ -89,7 +89,10 @@ Where the file goes:
   --file <path> writes exactly that path and skips the task-id rule entirely, so
   it can append to any path you can write (creating parent directories), and
   "clear --file" removes one. Pass it only from a script whose arguments you
-  control; prefer --task, which cannot leave the progress directory.
+  control; prefer --task, which cannot leave the progress directory. "run" is the
+  exception: it needs the id for its relay file and for the events it writes, so it
+  requires --task whether or not --file is given, and its own --state wins over one
+  you pass, because the wrapper writes the ending from the exit code.
 
 Watching a run instead of asking again:
   dsh-progress watch [--task <id>] [--interval MS] [--once]
@@ -104,6 +107,8 @@ Watching a run instead of asking again:
                  clock left off, so a script can read it; --task narrows either one
                  to a single task, and "list --task" is the same read without the
                  follow.
+  A directory holding more than 64 task files is read up to that many and says so on
+  stderr — the same working-set bound the Host half applies to its own scan.
 
 Examples:
   node "$env:DSH_PROGRESS_CLI" emit --task build --pct 10 --msg "linking"
@@ -603,12 +608,27 @@ function filterOf(options) {
 }
 
 /**
+ * How many task files a reader looks at, mirroring the Host half's working-set bound
+ * (`MAX_FILES_PER_DIR` in `src/host/store.ts`).
+ *
+ * The per-file ceiling bounds one read; this bounds how many reads a single listing
+ * does. Without it, a directory that accumulated years of task files makes `list` a
+ * one-off cost and `watch` a per-tick one — and the reader is the cheap path by
+ * design.
+ */
+const MAX_TASK_FILES = 64
+
+/**
  * One row per reporting task, folded from the last event in each file.
  *
  * `rows: null` is deliberately not the same as an empty list: a missing directory
  * says progress reporting was never configured, while a directory holding nothing
  * says no task is running. The two get different sentences, and the difference is
  * the whole reason this returns the directory alongside the rows.
+ *
+ * A directory past the file ceiling is reported up to it, and says so on stderr:
+ * dropping rows silently would read as "those tasks are gone", which is a different
+ * claim from "there are more than this here".
  * @param options - `dir`, and the optional `task` filter.
  * @returns the directory and its rows, or the directory with `rows: null`.
  */
@@ -621,9 +641,13 @@ export function rowsOf(options) {
   } catch {
     return { dir, rows: null }
   }
+  // The filter can only ever name one file, so the ceiling is about the unfiltered read.
+  const candidates = only === null ? names.sort() : names.filter(name => name === only)
+  if (candidates.length > MAX_TASK_FILES) {
+    process.stderr.write(`dsh-progress: showing ${MAX_TASK_FILES} of ${candidates.length} task files in ${dir}\n`)
+  }
   const rows = []
-  for (const name of names.sort()) {
-    if (only !== null && name !== only) continue
+  for (const name of candidates.slice(0, MAX_TASK_FILES)) {
     const event = lastEvent(join(dir, name))
     if (event === null) continue
     rows.push({

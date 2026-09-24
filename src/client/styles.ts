@@ -9,9 +9,9 @@
  * intentional seam the shipped client plugins use, which is what makes this
  * panel follow light/dark themes for free.
  *
- * The settings card is the one block with a counterpart in DSH itself, and it is
+ * The settings form is the one block with a counterpart in DSH itself, and it is
  * held to that counterpart's values rather than to this file's older tastes; see
- * the comment above `.dtp-set`.
+ * the banner over the `dtp-set*` rules below.
  */
 
 /** Marks the injected sheet so the module loader can attribute it to this plugin. */

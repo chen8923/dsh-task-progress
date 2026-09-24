@@ -75,11 +75,11 @@ source tree rebuilt locally — can all be done without trusting the maintainer.
 
 | | |
 | --- | --- |
-| **DSH** | Built and verified against `@deepseek-ai/dsh` 0.1.5-rc.2 (commit `0e77055`), Web profile. |
+| **DSH** | Built and verified against `@deepseek-ai/dsh` 0.1.7-rc.1, Web profile. |
 | **Node** | The plugin runs on Node 20+ (`engines`). The suite needs Node 22.18+ — it executes the TypeScript sources directly through type stripping. |
-| **DSH seams used** | `webServer`, `connection`, `shellEnv`, `settings`, `systemPrompt`, `slots`, `sidebarRightTabs`, `locale`, `settingsScope`. Every one is optional at the call site: a composition missing a seam loses that one surface and nothing else. |
+| **DSH seams used** | **Required to load**: `webServer`, `connection`, `shellEnv` — the entry declares these, so a composition missing any of them does not load the plugin at all. **Optional, injected**: `jobs`, `systemPrompt`, `configForms`, `slots`, `sidebarRightTabs`, `locale` — each one missing loses exactly its own surface and nothing else. `ctx.settings` is **not** used: since 0.1.7 the form comes from the `Config` this entry exports. |
 | **Dependencies** | None at runtime. The host half imports Node built-ins; the browser half ships everything it owns and treats `react` as a platform external. |
-| **Conflicts** | It claims no path another plugin owns. It adds one key to `shell.overlay`, one right-sidebar tab and one settings card — the same additive registration the shipped plugins use — plus its own route, settings namespace and prompt section, all named `task-progress`. |
+| **Conflicts** | It claims no path another plugin owns. It adds one key to `shell.overlay`, one right-sidebar tab and one settings card — the same additive registration the shipped plugins use — plus its own route (`/plugins/task-progress/state`) and prompt section. |
 
 ## Access and footprint
 
@@ -91,7 +91,7 @@ commits to, and a mismatch between it and the code is itself a security report.
 | Surface | Exactly what happens |
 | --- | --- |
 | **Files read** | `<root>/.dsh-progress/<session-id>/<task>.jsonl`, tail-only (256 KiB per file by default). `<root>` is a workspace directory a shell call handed the plugin, plus any absolute roots you configure. Nothing else is opened. |
-| **Files created** | `<workspace>/.dsh-progress/<session-id>/`, on a session's first shell call. The settings card writes that namespace's user layer through DSH's own settings service. |
+| **Files created** | `<workspace>/.dsh-progress/<session-id>/`, on a session's first shell call. The settings card writes **this entry's own `config`** through DSH's settings service — the entry is configured by the `Config` schema it exports, not by a runtime-registered namespace. |
 | **Shell environment** | Every shell call gains `DSH_PROGRESS_DIR` and `DSH_PROGRESS_CLI`. |
 | **Network** | None. No outbound request, no telemetry, no update check, no child process. |
 | **HTTP** | One route, `GET`/`HEAD /plugins/task-progress/state`, fenced by DSH's own `connection.requestRejection` before it reads anything, answering for exactly one session at a time, with no filesystem path in the response. |
@@ -99,7 +99,7 @@ commits to, and a mismatch between it and the code is itself a security report.
 | **Model context** | One **static** system-prompt section, beside DSH's background-job guidance. At most **one** extra notice per background job, and only for a job that has run past a threshold (default 30 s, `remindAfterMs`) with nothing reported for it; `0` turns it off. |
 | **Tools** | **None.** The tool catalogue is untouched — so, unlike most plugins, this one does not push new tool descriptions into the cached prefix. It costs the cache one short prompt section, once, plus the rare notice above. |
 | **UI** | One overlay entry, one right-sidebar tab, one settings card — additive keys in shared list slots. |
-| **Memory** | Bounded by configuration: `maxTasks` tasks per document, `messagesPerTask` messages per task, `maxFileBytes` per file, and a 64-directory LRU of known progress directories. |
+| **Memory** | Bounded by configuration: `maxTasks` tasks per document, `historyLimit` messages per task, `maxFileBytes` per file, and a 64-directory LRU of known progress directories. |
 
 Report a vulnerability through [private vulnerability reporting](SECURITY.md)
 rather than a public issue.
@@ -228,8 +228,9 @@ the script:
 
 ## Settings
 
-The plugin registers one settings namespace, so its knobs are editable where
-every plugin's are: **Settings → Plugins → Plugin configuration → Task progress**.
+Its knobs are editable where every plugin's are: the **Plugins** page, whose card
+for this plugin is titled **Task progress settings** (the title is the label this
+plugin registers, not a runtime namespace).
 
 | Field | Default | Meaning |
 | --- | --- | --- |
@@ -243,10 +244,10 @@ every plugin's are: **Settings → Plugins → Plugin configuration → Task pro
 | Remind the model after silence (ms) | `30000` | How long a background job may report nothing before the model is told once. This one spends the model's context, so it is here to be turned down; `0` never reminds. |
 | Float for jobs that report nothing | off | Whether the floating panel may appear for a job whose script reports no progress. Off by default — it is still listed in the sidebar tab. |
 
-Saving writes the namespace's user layer into `$DSH_HOME/settings.yaml`; pressing
-**Reset** (or emptying a field) removes the override, so the value falls back to
-the plugin row's `config` and then to the schema default. Changes apply live: a
-new scan interval re-arms the Host loops on their next tick, and the state
+Saving writes **this entry's own `config`** into the profile's `cordis.patch.yml`;
+pressing **Reset** (or emptying a field) removes the override, so the value falls
+back to the plugin row's `config` and then to the schema default. Changes apply
+live: a new scan interval re-arms the Host loops on their next tick, and the state
 document's `pollMs` follows the value the browser should use.
 
 `dirName` is deliberately absent from the panel — it is part of every path
@@ -260,8 +261,8 @@ producer nor the UI knows about the other, and neither knows about DSH internals
 | Layer | What it is | Why it is shaped that way |
 | --- | --- | --- |
 | **Protocol** (`docs/PROTOCOL.md`) | Append-only JSONL, one file per task | Any language, no IPC, no ports, no auth, survives restarts. Works with the plugin uninstalled — the files are just files. |
-| **Host half** | `ctx.shellEnv` contributor + directory poll + one HTTP route + a system-prompt section + one agent-step listener | Uses only public DSH seams (`webServer`, `connection`, `shellEnv`, `settings`, `systemPrompt`, `jobs`), and reads the job registry as **non-consuming snapshots** — never `read()`, which owns the output cursor. |
-| **Browser half** | One polling store, two panels (`shell.overlay` + a sidebar tab), and a settings card | The panels read the same snapshot and the card reads its own namespace scope, so adding or removing a surface never touches the data path. |
+| **Host half** | `ctx.shellEnv` contributor + directory poll + one HTTP route + a system-prompt section + one agent-step listener | Uses only public DSH seams (`webServer`, `connection`, `shellEnv`, `systemPrompt`, `jobs`), and reads the job registry as **non-consuming snapshots** — never `read()`, which owns the output cursor. |
+| **Browser half** | One polling store, two panels (`shell.overlay` + a sidebar tab), and a settings card | The panels read the same snapshot and the card reads its own form through `ctx.configForms`, so adding or removing a surface never touches the data path. |
 
 **Why the plugin does not read job output.** `ctx.jobs.read()` consumes a
 single-consumer cursor that belongs to the model's `job_output` tool; a browser
@@ -321,7 +322,7 @@ rehydrate a schema envelope at all.
 ## Development
 
 ```bash
-npm test          # 197 tests, one process (works in restricted sandboxes)
+npm test          # the whole suite, one process (works in restricted sandboxes)
 npm run test:runner   # the same suite through node --test
 npm run build         # requires tsdown
 ```
@@ -334,10 +335,11 @@ src/host/              settings namespace, store, shell-environment contributor,
 src/client/            polling store, formatting, settings form, React components, slots, styles
 bin/dsh-progress.mjs   the dependency-free producer CLI
 docs/PROTOCOL.md       the file contract and every configuration key
-test/                  seventeen suites: protocol, job reconciliation, store,
+test/                  eighteen suites: protocol, job reconciliation, store,
                        formatting, host wiring, settings, settings form, prompt
-                       section, session hook, client store, CLI, wrapper, bundle,
-                       settings chrome, privacy, release
+                       section, reminder, session hook, client contract, client
+                       store, CLI, wrapper, bundle, settings chrome, privacy,
+                       release
 tools/                 test entry and the build/pack/install script
 ```
 
@@ -346,20 +348,23 @@ to build needs pnpm's build-script allowlist, whose key contains the exact commi
 — so the install would take two steps and the second one would change on every
 push. Shipping the build makes it one command, at the cost of discipline: after
 any source change, run `npm run build` and commit `lib/` in the same commit.
-`test/bundle.test.ts` fails if the build is missing, is not a loader bundle, or
-no longer carries what the sources define. `prepublishOnly` still builds for
-`npm publish`. The suites run on Node 22.18+ (they execute the TypeScript sources
-directly through type stripping), while the plugin itself runs on Node 20+.
+`test/bundle.test.ts` fails if the build is missing or is not a loader bundle, and
+CI rebuilds `lib/` and fails if the committed bytes are not what the sources
+produce — that second check is the one a forgotten rebuild trips. `prepublishOnly`
+still builds for `npm publish`. The suites run on Node 22.18+ (they execute the
+TypeScript sources directly through type stripping), while the plugin itself runs on
+Node 20+.
 
-**The bundler is pinned, and Dependabot is told to leave it alone.** `tsdown` and
-`typescript` are held at exact versions because a bundler release changes the
-bytes of the committed `lib/` — the build that ships to users and to git installs.
-A bump and a rebuild belong in one commit, and a bot can only open the first half
-of that, so `.github/dependabot.yml` ignores those two dependencies entirely. That
-includes their **security** pull requests: the option is documented as changing how
-Dependabot creates security updates too. What remains is the Dependabot **alert**
-on the Security tab, and that is the signal to act — bump, `npm run build`,
-confirm `test/bundle.test.ts` still passes, and commit `lib/` in the same commit.
+**The build toolchain is pinned, and Dependabot is told to leave it alone.** `tsdown`
+is held at an exact version, because a bundler release changes the bytes of the
+committed `lib/` — the build that ships to users and to git installs. `typescript` is
+a range (`^5.9.0`), since it is the bundler that decides those bytes; a bump of
+either, and its rebuild, belong in one commit, and a bot can only open the first half,
+so `.github/dependabot.yml` ignores both. That includes their **security** pull
+requests: the option is documented as changing how Dependabot creates security updates
+too. What remains is the Dependabot **alert** on the Security tab, and that is the
+signal to act — bump, `npm run build`, confirm `test/bundle.test.ts` still passes, and
+commit `lib/` in the same commit.
 Everything else (the workflows' actions, the lockfile) still gets its automatic
 pull requests, which is where automation belongs.
 
@@ -373,15 +378,15 @@ ships.
 ### Releasing
 
 ```bash
-npm test                                  # 197 tests, one process
-git push && git tag v0.2.0 && git push origin v0.2.0   # CI publishes it, with provenance
+npm test                                  # the whole suite, one process
+git push && git tag v0.2.1 && git push origin v0.2.1   # CI publishes it, with provenance
 npm publish                               # manual fallback: builds first, then publishes
 ```
 
 `test/release.test.ts` fails if the version in `package.json` is not also stated
 in both READMEs and the changelog, if a documented example is missing from
 `files`, or if the repository links disagree with the install instructions — so
-the four places a version or a URL appears cannot drift apart.
+the five places a version appears cannot drift apart.
 
 Tagging publishes through `.github/workflows/publish.yml`, once the trusted
 publisher is configured on npm (repository `chen8923/dsh-task-progress`, workflow

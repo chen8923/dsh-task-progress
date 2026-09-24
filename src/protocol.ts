@@ -16,9 +16,14 @@ export const PROTOCOL_VERSION = 1
 export const STATE_ROUTE = '/plugins/task-progress/state'
 
 /**
- * The settings namespace this plugin registers on the Host and keys its browser
- * card on. Spelled once, here, because both halves must agree on it and the two
- * halves must not import each other (the browser bundle may not pull Node code).
+ * The settings namespace this plugin registered **before DSH 0.1.7**.
+ *
+ * Kept as the name of a fact rather than as a seam: since 0.1.7 a plugin's settings
+ * are addressed by the id of its own profile entry (`dsh-task-progress`), because the
+ * form is derived from the `Config` schema that entry exports — there is no
+ * registration call left for a namespace like this one to be keyed on. It survives
+ * because a settings document written by an older version is keyed by this string, so
+ * a reader looking for where those values went needs the old spelling to find them.
  */
 export const SETTINGS_NAMESPACE = 'task-progress'
 

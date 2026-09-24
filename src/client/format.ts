@@ -194,6 +194,25 @@ export function tailLines(
   maxChars: number = TAIL_LINE_CHARS,
 ): readonly string[] {
   const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0)
-  return lines.slice(-Math.max(1, maxLines)).map(line =>
-    line.length <= maxChars ? line : `${line.slice(0, Math.max(1, maxChars - 1))}…`)
+  return lines.slice(-Math.max(1, maxLines)).map(line => clip(line, maxChars))
+}
+
+/**
+ * Clip one line to a width, counting whole characters rather than code units.
+ *
+ * `slice` counts UTF-16 code units, so a clip that lands inside a surrogate pair cuts
+ * it in half and the browser renders the replacement glyph where the character used to
+ * be. A job's output is arbitrary text, so the boundary is reachable by accident — a
+ * command that prints a progress bar of emoji is enough. The code-point array is built
+ * only for a line that is already too long, which keeps the common case allocation-free.
+ * @param line - the trimmed line.
+ * @param maxChars - the widest it may be, ellipsis included.
+ * @returns the line, clipped when it had to be.
+ */
+function clip(line: string, maxChars: number): string {
+  const limit = Math.max(1, maxChars)
+  if (line.length <= limit) return line
+  const characters = [...line]
+  if (characters.length <= limit) return line
+  return `${characters.slice(0, limit - 1).join('')}…`
 }

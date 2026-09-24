@@ -8,11 +8,11 @@ import assert from 'node:assert/strict'
 import { SETTINGS_NAMESPACE } from '../src/protocol.ts'
 import { CONFIG_DEFAULTS, readConfig } from '../src/host/config.ts'
 import {
-  progressSchema, registerProgressSettings, resolveProgressSettings,
-  type ProgressSettings, type SchemaNodeLike, type SettingsProviderLike,
+  progressSchema, resolveProgressSettings,
+  type ProgressSettings, type SchemaNodeLike,
 } from '../src/host/settings.ts'
 
-test('the namespace is the one both halves spell', () => {
+test('the pre-0.1.7 namespace keeps its spelling, because old documents are keyed by it', () => {
   assert.equal(SETTINGS_NAMESPACE, 'task-progress')
 })
 
@@ -151,28 +151,4 @@ test('the schema is callable, serializable, and structurally walkable', () => {
   }
   const section = resolveProgressSettings({ pollMs: 1000, roots: ['a', 'b'] })
   assert.deepEqual(walk(schema, section), section)
-})
-
-test('register passes the row config as the composition base, and applies live', () => {
-  const calls: { ns: string, base: unknown, applies: string | undefined }[] = []
-  const settings: SettingsProviderLike = {
-    register: (ns, _schema, options) => {
-      calls.push({ ns, base: options?.base, applies: options?.applies })
-      return {
-        get: () => resolveProgressSettings(options?.base),
-        watch: () => () => {},
-        update: async () => {},
-        replace: async () => {},
-      }
-    },
-  }
-  const scope = registerProgressSettings(settings, { scanMs: 5000, roots: ['/x'] })
-  assert.deepEqual(calls, [{ ns: SETTINGS_NAMESPACE, base: { ...CONFIG_DEFAULTS, scanMs: 5000, roots: ['/x'] }, applies: 'live' }])
-  // The handle resolves through the same schema, so the base is what `get()`
-  // reports until a user layer exists.
-  assert.equal(scope.get().scanMs, 5000)
-
-  // A row that configured nothing still hands over a complete base.
-  registerProgressSettings(settings, undefined)
-  assert.deepEqual(calls[1]?.base, readConfig(undefined))
 })

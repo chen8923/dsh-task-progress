@@ -52,7 +52,7 @@ The version here, in `package.json`, and in both READMEs is checked by
   the two views the way DSH's own settings pages do, and draws no card chrome of its
   own; the rule that painted it is gone from the sheet rather than left dead. Measured
   on the live page: two identical description lines and no form before, one line and
-  ten field rows after. The drift that let it through was in the module's own note,
+  nine field rows after. The drift that let it through was in the module's own note,
   which still described the pre-0.1.7 `settings.plugin.item` slot.
 - **The reminder's notice is admitted by the session log again.** DSH moved its
   session format to V4, and the V4 writer refuses a message whose source is the
@@ -68,14 +68,18 @@ The version here, in `package.json`, and in both READMEs is checked by
   pinned by `test/reminder.test.ts` — every other field of the message can be read off
   `createUserMessage`, and this one cannot.
 - **The memory bound is named the way the code names it, and the suite size is stated
-  once.** The `Memory` row in both READMEs and in `SECURITY.md` named `fileTailBytes`,
-  which no code has: the ceiling is `maxFileBytes`, as `config.ts` and `PROTOCOL.md`
-  both already said — a reader trying to bound memory would have looked for a knob that
-  does not exist. The two READMEs also stated two different sizes for the same suite,
-  `187 tests` in Development and `168 checks` in Releasing, neither of them current.
-  The version never drifts because `test/release.test.ts` reads it in five places; the
-  count is pinned by nothing, which is the actual defect — dropping the number, or
-  deriving it, is left as a recommendation rather than done here.
+  once.** The `Memory` row in both READMEs and in `SECURITY.md` named `fileTailBytes`
+  **and `messagesPerTask`**, and no code has either: the ceiling is `maxFileBytes` and
+  the message cap is `historyLimit`, as `config.ts` and `PROTOCOL.md` both already
+  said — a reader trying to bound memory would have looked for two knobs that do not
+  exist. (The first pass at this fixed one of the two names and left the other, in the
+  same row, which is why the row is now checked against `config.ts` line by line
+  rather than against the prose beside it.) The two READMEs also stated two different
+  sizes for the same suite, `187 tests` in Development and `168 checks` in Releasing,
+  neither of them current, and the count then went stale again within six commits —
+  so both now say "the whole suite" and the number is gone. The version never drifts
+  because `test/release.test.ts` reads it in five places; nothing pinned the count,
+  which was the actual defect.
 - **The CLI's reader takes the tail of a progress file, like everything else that
   reads one.** `list` and `watch` read a file whole while the Host half applied the
   256 KiB ceiling `PROTOCOL.md` documents and both READMEs promise — and `watch`

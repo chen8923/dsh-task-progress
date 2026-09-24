@@ -24,7 +24,6 @@
  */
 
 import { createElement } from 'react'
-import { SETTINGS_NAMESPACE } from '../protocol.ts'
 import { ProgressBody } from './ProgressBody.tsx'
 import { ProgressOverlay } from './ProgressOverlay.tsx'
 import { SettingsCard } from './SettingsCard.tsx'

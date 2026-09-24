@@ -21,11 +21,13 @@
  * matters most is that no card chrome of ours exists any more.
  *
  * The values cannot be read from DSH at test time (the DSH checkout is not this
- * package, and a machine path may not enter the tree — see `privacy.test.ts`),
- * so they are recorded here as the contract they are, taken from
+ * package, and a machine path may not enter the tree — see `privacy.test.ts`), so
+ * they are recorded here as the contract they are: the form's field, input and action
+ * rules were taken from
  * `packages/client/ui-settings-plugins/src/client/fields.module.css` at DSH
- * 0.1.5-rc.2. When a DSH upgrade moves them, this is where the difference shows
- * up, and updating it is a decision rather than drift.
+ * 0.1.5-rc.2, and re-checked against the computed styles of a running 0.1.7-rc.1
+ * panel. When a DSH upgrade moves them, this is where the difference shows up, and
+ * updating it is a decision rather than drift.
  *
  * Every assertion reads one rule's own declarations, never the sheet from a
  * selector onwards: an unbounded scan happily finds the token it is looking for

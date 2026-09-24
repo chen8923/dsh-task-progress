@@ -155,3 +155,14 @@ test('a very wide tail line is clipped rather than wrapped', () => {
   assert.ok(line.length <= 96, 'a row stays one line high')
   assert.match(line, /…$/, 'and says so when it clipped')
 })
+
+test('a clip lands between characters, never inside one', () => {
+  // The clip is a `slice`, which counts UTF-16 code units — so a clip that falls
+  // inside a surrogate pair cuts it in half and the browser draws the replacement
+  // glyph where the character was. A job printing emoji is all it takes to reach it,
+  // so the width counts characters and the assertion counts them the same way.
+  const [clipped] = tailLines(`${'🚀'.repeat(10)}tail`, 3, 5)
+  assert.equal(clipped, '🚀🚀🚀🚀…')
+  assert.doesNotMatch(clipped ?? '', /\uFFFD/, 'no half of a character reached the row')
+  assert.equal([...(clipped ?? '')].length, 5, 'the cap counts characters, not code units')
+})

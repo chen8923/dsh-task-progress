@@ -58,11 +58,11 @@ diff -r ../package/lib lib              # 无输出 = 发布的字节就是这�
 
 | | |
 | --- | --- |
-| **DSH** | 构建并实测于 `@deepseek-ai/dsh` 0.1.5-rc.2（commit `0e77055`），Web profile。 |
+| **DSH** | 构建并实测于 `@deepseek-ai/dsh` 0.1.7-rc.1，Web profile。 |
 | **Node** | 插件本体要求 Node 20+（见 `engines`）；测试套件要求 Node 22.18+（它靠类型擦除直接跑 TypeScript 源码）。 |
-| **用到的 DSH 接缝** | `webServer`、`connection`、`shellEnv`、`settings`、`systemPrompt`、`slots`、`sidebarRightTabs`、`locale`、`settingsScope`。**每一个都是可选的**：组合里缺哪个，就少哪一块界面，其余照常。 |
+| **用到的 DSH 接缝** | **加载必需**：`webServer`、`connection`、`shellEnv` —— 条目就声明这三个，缺任何一个插件根本不加载。**可选注入**：`jobs`、`systemPrompt`、`configForms`、`slots`、`sidebarRightTabs`、`locale` —— 缺哪个就少那一块界面，其余照常。`ctx.settings` **不使用**：0.1.7 起表单来自本条目自己导出的 `Config`。 |
 | **依赖** | 运行时零依赖。宿主半只 import Node 内置模块；浏览器半把自己的一切都打包进来，只把 `react` 当平台外部依赖。 |
-| **冲突** | 不占用任何别人拥有的路径：往 `shell.overlay`、右侧栏、设置区各**增加**自己的一个条目（与官方插件同样的追加式注册），外加自己的路由、设置命名空间和提示词段，一律以 `task-progress` 命名。 |
+| **冲突** | 不占用任何别人拥有的路径：往 `shell.overlay`、右侧栏、设置区各**增加**自己的一个条目（与官方插件同样的追加式注册），外加自己的路由（`/plugins/task-progress/state`）和提示词段。 |
 
 ## 触碰范围
 
@@ -71,7 +71,7 @@ diff -r ../package/lib lib              # 无输出 = 发布的字节就是这�
 | 面 | 实际发生的事 |
 | --- | --- |
 | **读取** | `<root>/.dsh-progress/<会话 id>/<任务>.jsonl`，且只读文件尾部（默认每个文件 256 KiB）。`<root>` 是被 shell 调用交到它手上的 workspace 目录，加上你自己配置的绝对路径根。其它文件一概不打开。 |
-| **创建** | `<workspace>/.dsh-progress/<会话 id>/`（该会话第一次 shell 调用时）。设置页的保存经 DSH 自己的设置服务写入该命名空间的用户层。 |
+| **创建** | `<workspace>/.dsh-progress/<会话 id>/`（该会话第一次 shell 调用时）。设置页的保存经 DSH 自己的设置服务写入**本条目自己的 `config`**（条目由它导出的 `Config` schema 承载，不是运行时注册的命名空间）。 |
 | **Shell 环境** | 每次 shell 调用会多出 `DSH_PROGRESS_DIR` 与 `DSH_PROGRESS_CLI` 两个变量。 |
 | **联网** | 没有。不发任何外部请求，无遥测、无更新检查、不启动子进程。 |
 | **HTTP** | 只有一个路由 `GET`/`HEAD /plugins/task-progress/state`，**先**过 DSH 自己的 `connection.requestRejection` 再读任何东西；一次只回答一个会话，响应里不含任何文件系统路径。 |
@@ -79,7 +79,7 @@ diff -r ../package/lib lib              # 无输出 = 发布的字节就是这�
 | **模型上下文** | 只加一段**静态**系统提示词（紧挨着 DSH 的后台任务说明）。另外，**每个后台任务最多一条**提醒，且仅当该任务已运行超过阈值（默认 30 秒，配置项 `remindAfterMs`；`0` 关闭）却无人上报时才发。 |
 | **工具** | **一个都不加。** 工具目录原封不动——所以和多数插件不同，装它不会往缓存前缀里塞新的工具说明书。它的缓存代价是**一次性的短短一段**，加上上面那条罕见的提醒。 |
 | **界面** | 悬浮层、右侧栏 tab、设置卡片各一个，都是往共享列表槽里追加自己的键。 |
-| **内存** | 受配置约束：一次文档最多 `maxTasks` 个任务、每任务 `messagesPerTask` 条消息、每文件 `maxFileBytes` 字节，已知进度目录最多 64 个（LRU）。 |
+| **内存** | 受配置约束：一次文档最多 `maxTasks` 个任务、每任务 `historyLimit` 条消息、每文件 `maxFileBytes` 字节，已知进度目录最多 64 个（LRU）。 |
 
 漏洞请走[私密上报](SECURITY.md)，不要先开公开 issue。
 
@@ -166,7 +166,7 @@ node "$env:DSH_PROGRESS_CLI" run --task <id> -- <你的命令>
 
 ## 设置页
 
-插件注册了一个 settings 命名空间，所以它的开关就在所有插件共用的位置：**设置 → 插件 → 插件配置 → 任务进度设置**。
+插件的开关就在所有插件共用的位置：**插件页 → 任务进度设置**（卡片标题取自插件自己注册的 slot 标签，不再是一个运行时命名空间）。
 
 | 字段 | 默认值 | 含义 |
 | --- | --- | --- |
@@ -180,7 +180,7 @@ node "$env:DSH_PROGRESS_CLI" run --task <id> -- <你的命令>
 | 未上报多久提醒模型（毫秒） | `30000` | 后台任务静默多久后，模型收到一次提醒。这一项花的是**模型的上下文**，所以放在面板上让你能调小；`0` 表示从不提醒。 |
 | 未上报任务也弹悬浮胶囊 | 关 | 脚本没有上报进度的后台任务，是否允许悬浮面板**主动弹出来**。默认关——它仍然列在右侧栏 tab 里。 |
 
-保存会把用户层写进 `$DSH_HOME/settings.yaml`；按「重置」（或清空某个字段后保存）会移除覆盖，值依次回落到插件行的 `config`、再到 schema 默认值。改动**实时生效**：新的扫描间隔会在下一拍重新定时，状态文档里的 `pollMs` 与 `overlayUnreported` 也会跟着变成浏览器该用的值。
+保存会把**本条目自己的 `config`** 写进 profile 的 `cordis.patch.yml`；按「重置」（或清空某个字段后保存）会移除覆盖，值依次回落到插件行的 `config`、再到 schema 默认值。改动**实时生效**：新的扫描间隔会在下一拍重新定时，状态文档里的 `pollMs` 与 `overlayUnreported` 也会跟着变成浏览器该用的值。
 
 `dirName` **刻意不在面板里**——它已经写进了每一个路径，所以只作为插件行的组合层设置。
 
@@ -191,8 +191,8 @@ node "$env:DSH_PROGRESS_CLI" run --task <id> -- <你的命令>
 | 层 | 形态 | 为什么这样 |
 | --- | --- | --- |
 | **协议**（`docs/PROTOCOL.md`） | 追加式 JSONL，一任务一文件 | 任何语言都能写；没有 IPC、端口、鉴权，重启不丢。插件不装也照样能用——文件就是文件。 |
-| **宿主半** | `ctx.shellEnv` 贡献者 + 目录轮询 + 一个 HTTP 路由 + 一段系统提示词 + 一个 agent 步进监听 | 只用公开接缝（`webServer`、`connection`、`shellEnv`、`settings`、`systemPrompt`、`jobs`），并且把任务注册表当**非消费性快照**读——**绝不**调 `read()`（它持有的是输出游标）。 |
-| **浏览器半** | 一个轮询 store、两个面板（`shell.overlay` 与右栏 tab），加一张设置卡片 | 两个面板读同一份快照，卡片读自己的命名空间 scope——增删任何一块都不动数据通路。 |
+| **宿主半** | `ctx.shellEnv` 贡献者 + 目录轮询 + 一个 HTTP 路由 + 一段系统提示词 + 一个 agent 步进监听 | 只用公开接缝（`webServer`、`connection`、`shellEnv`、`systemPrompt`、`jobs`），并且把任务注册表当**非消费性快照**读——**绝不**调 `read()`（它持有的是输出游标）。 |
+| **浏览器半** | 一个轮询 store、两个面板（`shell.overlay` 与右栏 tab），加一张设置卡 | 两个面板读同一份快照，卡片经 `ctx.configForms` 读本条目自己的表单——增删任何一块都不动数据通路。 |
 
 **为什么不去读任务输出。** `ctx.jobs.read()` 消费的是属于模型 `job_output` 的**单消费者游标**；浏览器路径读一次，就会悄悄拿走模型再也看不到的字节（DSH 把这条钉成了有测试兜底的不变量）。所以这里的进度是**脚本主动报告**的东西——这正是它可以和任何东西并存的原因。
 
@@ -213,7 +213,7 @@ node "$env:DSH_PROGRESS_CLI" run --task <id> -- <你的命令>
 ## 开发
 
 ```bash
-npm test              # 197 个测试，单进程（受限沙箱里也能跑）
+npm test              # 整套测试，单进程（受限沙箱里也能跑）
 npm run test:runner   # 同一套测试走 node --test
 npm run build         # 需要 tsdown
 ```
@@ -226,27 +226,27 @@ src/host/              设置命名空间、store、环境变量贡献者、HTTP
 src/client/            轮询 store、格式化、设置表单、React 组件、slot、样式
 bin/dsh-progress.mjs   零依赖的生产者 CLI
 docs/PROTOCOL.md       文件协议与全部配置项
-test/                  十七套测试：协议、job 结算、store、格式化、宿主接线、设置、
-                       设置表单、提示词段、会话钩子、客户端 store、CLI、包装器、
-                       构建产物、设置卡片外观、隐私、发版一致性
+test/                  十八套测试：协议、job 结算、store、格式化、宿主接线、设置、
+                       设置表单、提示词段、提醒、会话钩子、客户端契约、客户端 store、
+                       CLI、包装器、构建产物、设置外观、隐私、发版一致性
 tools/                 测试入口与构建/打包/安装脚本
 ```
 
-**构建工具链是钉住的，并且已经让 Dependabot 别碰它。** `tsdown` 与 `typescript` 固定为精确版本，因为 bundler 一升级，提交在仓库里的 `lib/` 字节就会变 —— 而 `lib/` 正是发给用户、也是 git 安装所取的那份构建产物。升级与重建必须落在同一个提交里，机器人只能完成前半步，所以 `.github/dependabot.yml` 把这两个依赖整个忽略掉。**这也包括它们的安全更新 PR**（官方文档写明：该选项同样改变安全更新 PR 的创建方式）。留下的信号是 Security 页上的 Dependabot **告警**，它就是动手的触发点：升版本 → `npm run build` → 确认 `test/bundle.test.ts` 仍通过 → 把重建的 `lib/` 放进同一个提交。其余部分（workflow 里的 actions、lockfile）照旧收自动 PR —— 自动化该用在这些地方。
+**构建工具链是钉住的，并且已经让 Dependabot 别碰它。** `tsdown` 固定为精确版本，因为 bundler 一升级，提交在仓库里的 `lib/` 字节就会变 —— 而 `lib/` 正是发给用户、也是 git 安装所取的那份构建产物。`typescript` 则是范围（`^5.9.0`），因为决定那些字节的是 bundler；两者的升级与重建都必须落在同一个提交里，而机器人只能完成前半步，所以 `.github/dependabot.yml` 把这两个依赖整个忽略掉。**这也包括它们的安全更新 PR**（官方文档写明：该选项同样改变安全更新 PR 的创建方式）。留下的信号是 Security 页上的 Dependabot **告警**，它就是动手的触发点：升版本 → `npm run build` → 确认 `test/bundle.test.ts` 仍通过 → 把重建的 `lib/` 放进同一个提交。其余部分（workflow 里的 actions、lockfile）照旧收自动 PR —— 自动化该用在这些地方。
 
 **`screenshots.json` 是市场元数据，不是构建输入。** 插件目录与 dsh-market 的详情页会展示它指名的界面截图，约定是**由仓库自己声明**而不是写进列表：1–8 条相对本文件的路径，且不得跳出插件目录。它对运行时没有任何影响，指向的图片就是 `docs/` 本就在发的那一张。
 
 ### 发布
 
 ```bash
-npm test                                              # 197 个测试，单进程
-git push && git tag v0.2.0 && git push origin v0.2.0   # 由 CI 发布，并带 provenance
+npm test                                              # 整套测试，单进程
+git push && git tag v0.2.1 && git push origin v0.2.1   # 由 CI 发布，并带 provenance
 npm publish                                           # 手工兜底：先构建再发布
 ```
 
 `test/release.test.ts` 会在这些情况失败：`package.json` 的版本没有同时出现在两个 README 与
 CHANGELOG 里；文档里让用户跑的某个示例没被打进 `files`；或者仓库链接与安装说明指向不同项目
-——所以"版本/链接出现的四个地方"不可能各自漂移。
+——所以"版本出现的五个地方"不可能各自漂移。
 
 打 tag 后由 `.github/workflows/publish.yml` 发布（需先在 npm 上配置 trusted publisher：
 仓库 `chen8923/dsh-task-progress`、workflow `publish.yml`）。这条路径**不存任何 token**，

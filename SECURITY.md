@@ -32,7 +32,7 @@ itself a security report.
 | **Observed output tails** | For a row whose job reports nothing, the panel also shows the **last few lines the job is printing** — read from the tail DSH streams to this browser once a surface asks to observe it (`ctx.jobs.observe(sessionId, id)`, reference-counted on DSH's side and released when the row stops rendering). Three things bound it: the stream is **DSH's own push to this client** (this plugin opens no read of its own and consumes no registry cursor), DSH bounds the tail to its render limit and sets `gapBefore` when bytes were dropped, and the row renders at most **three clipped lines** with the full tail only in a tooltip. The tail **never reaches the Host half and is never put into a model step**. |
 | **Tools** | None. The plugin adds no tool, so the tool catalogue — and the cached prefix built from it — is untouched. |
 | **UI** | Three additive registrations: one `shell.overlay` entry, one right-sidebar tab, one settings card. Each adds its own key to a shared list slot; none replaces or claims another plugin's path, and each is skipped when the seam is absent. |
-| **Memory** | Bounded by configuration: at most `maxTasks` tasks per document, `messagesPerTask` messages per task, `maxFileBytes` read per file, and a 64-directory LRU of known progress directories. |
+| **Memory** | Bounded by configuration: at most `maxTasks` tasks per document, `historyLimit` messages per task, `maxFileBytes` read per file, and a 64-directory LRU of known progress directories. |
 
 ## In scope
 
@@ -97,7 +97,8 @@ noreply forms.
 - **只读**：被 shell 调用交到手上的 workspace 目录（加你配置的额外根目录）下的
   `.dsh-progress/<会话 id>/<任务>.jsonl`，且只读文件尾部（默认每个文件 256 KiB）。
 - **只写**：首次 shell 调用时创建 `<workspace>/.dsh-progress/<会话 id>/`；改设置页时
-  经 DSH 自己的设置服务写入该命名空间的用户层。
+  经 DSH 自己的设置服务写入**本条目自己的 `config`**（条目由它导出的 `Config` schema 承载，
+  不是运行时注册的命名空间）。
 - **联网**：没有。不发任何外部请求，无遥测、无更新检查、不启动子进程。
 - **HTTP**：只有一个路由 `GET`/`HEAD /plugins/task-progress/state`，**先**过
   `ctx.connection.requestRejection` 再读任何东西，一次只回答一个 `?session=`，

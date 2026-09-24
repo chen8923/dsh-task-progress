@@ -88,6 +88,25 @@ test('a task can be followed instead of asked about', () => {
   assert.ok(followed.endsWith(formatRow(row, 5)), 'and the row behind it is the same row')
 })
 
+test('a directory past the file ceiling is read up to it, and says so', () => {
+  // One file is bounded by the tail read; the number of them was not, and `watch`
+  // re-reads on a timer — so a directory that accumulated years of task files was a
+  // per-tick cost in the reader that is supposed to be the cheap path. The ceiling
+  // mirrors the Host half's, and the note goes to stderr so the listing on stdout
+  // stays parseable (this test therefore prints one line of it).
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-progress-cap-'))
+  try {
+    for (let index = 0; index < 70; index += 1) {
+      const task = `t${String(index).padStart(2, '0')}`
+      writeFileSync(join(dir, `${task}.jsonl`), `{"v":1,"task":"${task}","pct":1}\n`, 'utf8')
+    }
+    assert.equal(rowsOf({ dir }).rows?.length, 64, 'the ceiling bounds how many files are folded')
+    assert.equal(rowsOf({ dir, task: 't05' }).rows?.length, 1, 'a filter names one file and cannot reach the ceiling')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('a reader takes the tail of a file, because a progress file is a log', () => {
   // PROTOCOL.md promises the reader looks at the last 256 KiB and tells a producer to
   // keep the file small — but it cannot enforce either. `watch` re-reads every tick by

@@ -155,4 +155,11 @@ test('the Config schema speaks Standard Schema, which is how cordis validates co
   const settings = code(read('src/host/settings.ts'))
   assert.match(settings, /'~standard':/u, 'the schema must expose the Standard Schema face')
   assert.match(settings, /validate: \(value: unknown\) =>/u, 'with a synchronous validate()')
+  // The vendor string is load-bearing, not decoration. The plugin loader only honours
+  // a `meta.volatile` field when the vendor says `schemastery`, which is exactly why a
+  // settings change here is applied by re-running `apply` — and therefore takes effect.
+  // Rename it to `schemastery` and the loader takes the volatile path instead, finds no
+  // `Volatile` reference inside a plain object, and drops every settings edit silently.
+  assert.match(settings, /vendor: 'dsh-task-progress'/u, 'the vendor must stay this plugin')
+  assert.doesNotMatch(settings, /vendor: 'schemastery'/u, 'claiming schemastery would silently drop settings edits')
 })

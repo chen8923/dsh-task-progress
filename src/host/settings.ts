@@ -1,39 +1,45 @@
 /**
- * The plugin's settings namespace: the one place its runtime knobs live.
+ * This plugin's settings: the schema its entry exports, and the resolver behind it.
  *
- * DSH's settings seam is "register and you are exposed": a Host plugin registers
- * a namespace, the browser registers a card under that namespace's key in
- * `settings.plugin.item`, and the Plugins section pairs the two without ever
- * learning what the namespace means. This module is the Host half of that
- * bargain.
+ * Since DSH 0.1.7 there is no registration call. A plugin's settings surface is
+ * derived from the `Config` schema its own entry exports: the settings domain asks
+ * every active entry for a schema, skips the ones whose JSON carries no editable
+ * field, and builds the form from the rest (`packages/settings/settings/src/index.ts`,
+ * `describe()`). The namespace is therefore the **entry's own id**
+ * (`dsh-task-progress`), and the browser half reads the form through
+ * `ctx.configForms` under that id.
  *
- * **Why the schema is hand-rolled.** `ctx.settings.register` takes a schemastery
- * schema, and schemastery is not resolvable from a plugin installed into a
- * profile (DSH itself lives in its own checkout; only plugins live beside the
- * profile). Depending on it would mean either a bundled copy or a peer that a
- * third-party install cannot satisfy. The service uses exactly three things from
- * the schema, so this module provides exactly those:
+ * This module is the Host half of that arrangement: {@link progressSchema} is what
+ * `src/host/index.ts` exports as `Config`, and {@link resolveProgressSettings} is
+ * what normalizes whatever the composition and the user layer hand over.
  *
- * 1. it is **callable** — `resolve()` does `schema(mergeLayers(base, section))`
- *    and takes the return value as the namespace's value;
- * 2. it carries **`toJSON()`** — `describe()` serializes it into the descriptor
- *    the browser receives;
+ * **Why the schema is hand-rolled.** schemastery is not resolvable from a plugin
+ * installed into a profile (DSH lives in its own checkout; only plugins live beside
+ * the profile), so depending on it would mean a bundled copy or a peer a third-party
+ * install cannot satisfy. The service uses exactly three things from a schema, so
+ * this module provides exactly those:
+ *
+ * 1. it is **callable** — the settings domain merges the layers and takes the return
+ *    value as the namespace's value;
+ * 2. it carries **`toJSON()`** — `describe()` serializes it into the descriptor the
+ *    browser receives, and the editable-field rule walks that JSON;
  * 3. it is **structurally walkable** — `redactSecrets` reads `type`, `meta.role`,
  *    `dict`, and `inner` to find `role('secret')` fields. This namespace declares
  *    none.
  *
- * Nothing else on a schema instance is consulted, and this module's tests pin
- * all three. Normalization is total: a hand-edited `settings.yaml` is clamped
- * into range rather than refused, so a typo can never strand a running plugin.
+ * It also carries the **Standard Schema** face (`~standard`) that cordis resolves a
+ * config through before the entry is allowed to run at all — see the note beside
+ * `vendor`, where the value of one string decides whether a settings change is
+ * applied or silently dropped.
+ *
+ * Nothing else on a schema instance is consulted, and this module's tests pin all
+ * three. Normalization is total: a hand-edited config is clamped into range rather
+ * than refused, so a typo can never strand a running plugin.
  *
  * @module dsh-task-progress/host/settings
  */
 
-import { SETTINGS_NAMESPACE } from '../protocol.ts'
-import { CONFIG_DEFAULTS, absoluteRoots, readConfig, type TaskProgressConfig } from './config.ts'
-
-/** The namespace this plugin owns. Must be a lowercase hyphenated identifier. */
-export { SETTINGS_NAMESPACE }
+import { CONFIG_DEFAULTS, absoluteRoots, type TaskProgressConfig } from './config.ts'
 
 /** The settings this namespace resolves to; identical to the plugin row's config. */
 export type ProgressSettings = TaskProgressConfig
@@ -56,27 +62,6 @@ export interface SchemaLike<T> extends SchemaNodeLike {
   (candidate: unknown): T
   /** Serialize for a configuration surface's descriptor. */
   toJSON(): SchemaNodeLike
-}
-
-/** The slice of `ctx.settings` this plugin uses. */
-export interface SettingsProviderLike {
-  register<T>(
-    ns: string,
-    schema: SchemaLike<T>,
-    options?: { readonly base?: Partial<T>, readonly applies?: 'live' | 'restart' },
-  ): SettingsScopeLike<T>
-}
-
-/** The owner handle `register` returns. */
-export interface SettingsScopeLike<T> {
-  /** Current resolved value: schema defaults, then the composition base, then the user layer. */
-  get(): T
-  /** Observe committed changes; the disposer rides the calling fiber. */
-  watch(callback: (next: T, prev: T) => void): () => void
-  /** Merge a partial patch into the user layer. */
-  update(patch: object): Promise<void>
-  /** Replace the user layer wholesale. */
-  replace(section: object): Promise<void>
 }
 
 /** A bounded integer from an unknown value, falling back rather than throwing. */
@@ -233,6 +218,14 @@ export function progressSchema(): SchemaLike<ProgressSettings> {
   Object.assign(schema, {
     '~standard': {
       version: 1,
+      // NOT 'schemastery', and this string is load-bearing rather than decorative.
+      // cordis asks this face before it will hand the entry a config at all, and the
+      // plugin loader only treats a `meta.volatile` field as hot-swappable when the
+      // vendor says schemastery — which is exactly why a settings change here goes
+      // through a full re-apply and therefore takes effect. Claim that vendor and the
+      // loader takes the volatile path instead, finds no `Volatile` reference in this
+      // plain object, and drops every settings edit **silently**.
+      // `test/settings.test.ts` pins the string.
       vendor: 'dsh-task-progress',
       // The resolver is total by construction (it clamps a hand-edited document
       // rather than refusing it), so validation cannot report issues.
@@ -241,25 +234,4 @@ export function progressSchema(): SchemaLike<ProgressSettings> {
   })
   schema.toJSON = () => envelopeOf(fields)
   return schema
-}
-
-/**
- * Register this plugin's settings namespace.
- *
- * The plugin row's own `config` becomes the composition **base** layer, which is
- * what the configuration surface shows as the value a reset returns to; user
- * edits sit above it in the profile's `settings.yaml`.
- *
- * @param settings - the live `ctx.settings` provider.
- * @param base - the plugin row's config, if it declared one.
- * @returns the owner handle, disposed with the calling fiber.
- */
-export function registerProgressSettings(
-  settings: SettingsProviderLike,
-  base?: unknown,
-): SettingsScopeLike<ProgressSettings> {
-  return settings.register(SETTINGS_NAMESPACE, progressSchema(), {
-    base: readConfig(base),
-    applies: 'live',
-  })
 }

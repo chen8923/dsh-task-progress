@@ -70,8 +70,10 @@ preference: a shell running under DSH's sandbox cannot create the pipes a piped
 child needs (`spawn` + `stdio: 'pipe'` fails with `EPERM`; the same spawn with a
 file descriptor works — both measured on this project's machine). The command's
 output is echoed to the wrapper's stdout as it arrives, so a job's output is still
-there to read, and the relay file is removed when the run ends. A wrapper exits
-with the wrapped command's exit code, so a shell can still branch on it.
+there to read, and the relay file is removed when the run ends **on its own** — a
+wrapper that is killed leaves it behind (no user code runs under `taskkill`), and the
+next run for that task id removes it before it starts. A wrapper exits with the
+wrapped command's exit code, so a shell can still branch on it.
 
 For anything the wrapper cannot express — a producer inside a longer script, a
 program that reports through a socket, a task stitched together from several
@@ -113,7 +115,8 @@ inferred endings and never written by a producer:
 - **A task id is a file name.** 1–40 characters of `A-Z a-z 0-9 . _ -`, starting
   with an alphanumeric. Anything else is ignored by the reader.
 - **A terminal state ends the run.** Appending `running` after `done` starts a new
-  run: the clock and the percentage reset, while the recent-message history stays.
+  run: the clock, the percentage and the **recent-message history** all reset — the
+  new run's own messages are the only ones it shows.
 - **An ending is not only the producer's to write.** A script can be killed
   between two lines, and then no user code runs at all (see *When the writer
   dies*). Write the ending — it carries the real outcome and message — but do not
@@ -123,9 +126,11 @@ inferred endings and never written by a producer:
   job's label, which for a shell job is the command. The match is a **whole word**:
   `--task sync-catalog`, `node build.mjs` and `--task=crack.rar` name their tasks,
   while `rebuild` does not name `build`, `payload` does not name `load`, and
-  `crackXrar` does not name `crack.rar`. A task id that appears nowhere in the
-  command is invisible to that match, and its row will keep reporting whatever the
-  file last said.
+  `crackXrar` does not name `crack.rar`. It is case-insensitive, and a name shorter
+  than **three characters** never matches — it would appear in half the commands ever
+  written and quietly hide jobs that reported nothing. A task id that appears nowhere
+  in the command is invisible to that match, and its row will keep reporting whatever
+  the file last said.
 - **One writer per task id.** Two jobs appending to one file is not a task with
   two writers: it is a task whose ending two of them cannot write, and whose
   percentage is whichever one appended last.
@@ -230,8 +235,8 @@ user is waiting on — the failure this whole plugin exists to prevent:
 A task nothing proves dead is left alone: a row that keeps saying `running` is
 the honest answer to "nobody knows", and the panel's own *no update for …* marker
 (60 s of silence) says the rest. Where the composition has no job registry — the
-plugin uses `ctx.jobs` and `ctx.agents` through optional injection — nothing is
-inferred at all, and the file is again the whole truth.
+plugin uses `ctx.jobs` through optional injection — nothing is inferred at all, and
+the file is again the whole truth.
 
 **What this cannot know.** The match is one-directional: a job is recognised as
 the writer because its label names the task. So a *second* writer whose command
@@ -245,10 +250,10 @@ one the panel is designed to survive.
 ## Configuration
 
 Every key has a default, and unusable values are clamped rather than fatal. They
-are editable in **Settings → Plugins → Plugin configuration → Task progress**:
-saving writes the namespace's user layer into `$DSH_HOME/settings.yaml`, and
-resetting a field removes the override so the value falls back to the plugin
-row's `config` and then to the default below.
+are editable on the **Plugins** page, whose card for this plugin is titled
+**Task progress settings**: saving writes **this entry's own `config`** into the
+profile's `cordis.patch.yml`, and resetting a field removes the override so the
+value falls back to the plugin row's `config` and then to the default below.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
