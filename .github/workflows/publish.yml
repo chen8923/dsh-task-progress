@@ -18,7 +18,7 @@
 # After that, a release is:
 #
 #   npm version patch          # or edit by hand, then run the suite
-#   git push && git push origin v0.2.1
+#   git push && git push origin v0.3.0
 #
 # and the tag does the publishing. A local `npm publish` still works as a
 # fallback for as long as npm allows it; it just cannot carry provenance.

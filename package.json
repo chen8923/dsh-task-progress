@@ -1,6 +1,6 @@
 {
   "name": "dsh-task-progress",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Live progress for long-running DSH tasks: a script reports structured progress to a per-session directory, and the Web UI shows it in a floating overlay and a right-sidebar tab.",
   "keywords": [
     "dsh",

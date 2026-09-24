@@ -4,7 +4,7 @@
 structured progress to a file; the Web UI shows it in a floating overlay and a
 right-sidebar tab — no polling the agent, no waiting for the command to finish.
 
-**Version 0.2.1** · MIT · [中文](README.zh.md) · [Changelog](CHANGELOG.md)
+**Version 0.3.0** · MIT · [中文](README.zh.md) · [Changelog](CHANGELOG.md)
 
 ![The floating panel over a running session: one task with its progress bar, message, elapsed time, unit counters and an ETA](docs/overlay.png)
 
@@ -380,7 +380,7 @@ ships.
 
 ```bash
 npm test                                  # the whole suite, one process
-git push && git tag v0.2.1 && git push origin v0.2.1   # CI publishes it, with provenance
+git push && git tag v0.3.0 && git push origin v0.3.0   # CI publishes it, with provenance
 npm publish                               # manual fallback: builds first, then publishes
 ```
 

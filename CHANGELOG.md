@@ -7,7 +7,12 @@ All notable changes to this plugin are recorded here. The format follows
 The version here, in `package.json`, in both READMEs and in the CLI's own `--version`
 string is checked by `test/release.test.ts`, so they cannot drift apart.
 
-## [0.2.1] — 2026-09-24
+## [0.3.0] — 2026-09-25
+
+A minor rather than a patch, and the work sat under `0.2.1` while it was unreleased:
+this release adds a command (`watch`) and changes the rule that decides whether a job
+counts as already reported. Both are more than a fix, and neither had shipped, so the
+number moved before the tag rather than after.
 
 ### Added
 
@@ -544,7 +549,7 @@ First release, so these are properties rather than changes:
 - No runtime dependencies, no `postinstall`, no network calls from either half,
   and no HTML injection surface in the browser half.
 
-[0.2.1]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.2.1
+[0.3.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.3.0
 [0.2.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.2.0
 [0.1.1]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.1
 [0.1.0]: https://github.com/chen8923/dsh-task-progress/releases/tag/v0.1.0
