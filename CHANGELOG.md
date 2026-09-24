@@ -42,6 +42,15 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ### Fixed
 
+- **The memory bound is named the way the code names it, and the suite size is stated
+  once.** The `Memory` row in both READMEs and in `SECURITY.md` named `fileTailBytes`,
+  which no code has: the ceiling is `maxFileBytes`, as `config.ts` and `PROTOCOL.md`
+  both already said — a reader trying to bound memory would have looked for a knob that
+  does not exist. The two READMEs also stated two different sizes for the same suite,
+  `187 tests` in Development and `168 checks` in Releasing, neither of them current.
+  The version never drifts because `test/release.test.ts` reads it in five places; the
+  count is pinned by nothing, which is the actual defect — dropping the number, or
+  deriving it, is left as a recommendation rather than done here.
 - **The CLI's reader takes the tail of a progress file, like everything else that
   reads one.** `list` and `watch` read a file whole while the Host half applied the
   256 KiB ceiling `PROTOCOL.md` documents and both READMEs promise — and `watch`

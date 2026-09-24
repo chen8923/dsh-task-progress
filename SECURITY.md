@@ -32,7 +32,7 @@ itself a security report.
 | **Observed output tails** | For a row whose job reports nothing, the panel also shows the **last few lines the job is printing** — read from the tail DSH streams to this browser once a surface asks to observe it (`ctx.jobs.observe(sessionId, id)`, reference-counted on DSH's side and released when the row stops rendering). Three things bound it: the stream is **DSH's own push to this client** (this plugin opens no read of its own and consumes no registry cursor), DSH bounds the tail to its render limit and sets `gapBefore` when bytes were dropped, and the row renders at most **three clipped lines** with the full tail only in a tooltip. The tail **never reaches the Host half and is never put into a model step**. |
 | **Tools** | None. The plugin adds no tool, so the tool catalogue — and the cached prefix built from it — is untouched. |
 | **UI** | Three additive registrations: one `shell.overlay` entry, one right-sidebar tab, one settings card. Each adds its own key to a shared list slot; none replaces or claims another plugin's path, and each is skipped when the seam is absent. |
-| **Memory** | Bounded by configuration: at most `maxTasks` tasks per document, `messagesPerTask` messages per task, `fileTailBytes` read per file, and a 64-directory LRU of known progress directories. |
+| **Memory** | Bounded by configuration: at most `maxTasks` tasks per document, `messagesPerTask` messages per task, `maxFileBytes` read per file, and a 64-directory LRU of known progress directories. |
 
 ## In scope
 

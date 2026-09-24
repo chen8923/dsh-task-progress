@@ -79,7 +79,7 @@ diff -r ../package/lib lib              # 无输出 = 发布的字节就是这�
 | **模型上下文** | 只加一段**静态**系统提示词（紧挨着 DSH 的后台任务说明）。另外，**每个后台任务最多一条**提醒，且仅当该任务已运行超过阈值（默认 30 秒，配置项 `remindAfterMs`；`0` 关闭）却无人上报时才发。 |
 | **工具** | **一个都不加。** 工具目录原封不动——所以和多数插件不同，装它不会往缓存前缀里塞新的工具说明书。它的缓存代价是**一次性的短短一段**，加上上面那条罕见的提醒。 |
 | **界面** | 悬浮层、右侧栏 tab、设置卡片各一个，都是往共享列表槽里追加自己的键。 |
-| **内存** | 受配置约束：一次文档最多 `maxTasks` 个任务、每任务 `messagesPerTask` 条消息、每文件 `fileTailBytes` 字节，已知进度目录最多 64 个（LRU）。 |
+| **内存** | 受配置约束：一次文档最多 `maxTasks` 个任务、每任务 `messagesPerTask` 条消息、每文件 `maxFileBytes` 字节，已知进度目录最多 64 个（LRU）。 |
 
 漏洞请走[私密上报](SECURITY.md)，不要先开公开 issue。
 
@@ -213,7 +213,7 @@ node "$env:DSH_PROGRESS_CLI" run --task <id> -- <你的命令>
 ## 开发
 
 ```bash
-npm test              # 187 个测试，单进程（受限沙箱里也能跑）
+npm test              # 197 个测试，单进程（受限沙箱里也能跑）
 npm run test:runner   # 同一套测试走 node --test
 npm run build         # 需要 tsdown
 ```
@@ -239,7 +239,7 @@ tools/                 测试入口与构建/打包/安装脚本
 ### 发布
 
 ```bash
-npm test                                              # 168 项检查，单进程
+npm test                                              # 197 个测试，单进程
 git push && git tag v0.2.0 && git push origin v0.2.0   # 由 CI 发布，并带 provenance
 npm publish                                           # 手工兜底：先构建再发布
 ```

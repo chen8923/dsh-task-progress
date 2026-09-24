@@ -99,7 +99,7 @@ commits to, and a mismatch between it and the code is itself a security report.
 | **Model context** | One **static** system-prompt section, beside DSH's background-job guidance. At most **one** extra notice per background job, and only for a job that has run past a threshold (default 30 s, `remindAfterMs`) with nothing reported for it; `0` turns it off. |
 | **Tools** | **None.** The tool catalogue is untouched — so, unlike most plugins, this one does not push new tool descriptions into the cached prefix. It costs the cache one short prompt section, once, plus the rare notice above. |
 | **UI** | One overlay entry, one right-sidebar tab, one settings card — additive keys in shared list slots. |
-| **Memory** | Bounded by configuration: `maxTasks` tasks per document, `messagesPerTask` messages per task, `fileTailBytes` per file, and a 64-directory LRU of known progress directories. |
+| **Memory** | Bounded by configuration: `maxTasks` tasks per document, `messagesPerTask` messages per task, `maxFileBytes` per file, and a 64-directory LRU of known progress directories. |
 
 Report a vulnerability through [private vulnerability reporting](SECURITY.md)
 rather than a public issue.
@@ -321,7 +321,7 @@ rehydrate a schema envelope at all.
 ## Development
 
 ```bash
-npm test          # 187 tests, one process (works in restricted sandboxes)
+npm test          # 197 tests, one process (works in restricted sandboxes)
 npm run test:runner   # the same suite through node --test
 npm run build         # requires tsdown
 ```
@@ -373,7 +373,7 @@ ships.
 ### Releasing
 
 ```bash
-npm test                                  # 168 checks, one process
+npm test                                  # 197 tests, one process
 git push && git tag v0.2.0 && git push origin v0.2.0   # CI publishes it, with provenance
 npm publish                               # manual fallback: builds first, then publishes
 ```
