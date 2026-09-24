@@ -11,6 +11,18 @@
  * These assertions are therefore deliberately about the *text* of the two files
  * that talk to DSH, and each one names the seam it protects. They are a tripwire
  * for the next rename, not a substitute for reading the upstream contract.
+ *
+ * **One borrowed name is weaker than the others, and is written down here because a
+ * commit message is not where a reader of the code looks.** The settings card asks
+ * the Plugins page's `plugins.item` slot for two views (`summary`, `page`) through the
+ * owner prop `view` — declared in DSH's
+ * `ui-plugin-manager/src/client/slot-contract.ts` as `PluginConfigViewProps.view`. If
+ * upstream renames that prop, `props.view` becomes `undefined`, the card answers the
+ * summary position with the form, and the page shows the duplicate card this branch
+ * just fixed — while every assertion below still passes. The `view === 'summary'`
+ * check in `test/settings-chrome.test.ts` is a tripwire for *this plugin* forgetting
+ * the branch, not for DSH renaming the prop. Closing that properly needs an upstream
+ * contract the suite can read, which it does not have.
  */
 
 import { test } from 'node:test'

@@ -30,7 +30,16 @@ The bundled CLI's `--task` follows the same rule as the reader, so it cannot
 leave the progress directory. Its `--file` option deliberately does not: it
 writes exactly the path given, which makes it the right tool for a producer
 whose file layout is fixed and the wrong tool for anything whose arguments come
-from somewhere you do not control (`clear --file` removes that path).
+from somewhere you do not control (`clear --file` removes that path). `run` is
+the exception — it needs the task id for its relay file and for the events it
+writes, so it requires `--task` whether or not `--file` is given, and its own
+`--state` wins over one you pass, because the wrapper writes the ending from the
+exit code.
+
+The CLI's readers (`list`, `watch`) look at at most **64 task files** in one
+directory, the same working-set bound the Host half applies to its own scan, and
+say so on stderr when a directory holds more. `watch` says it once rather than
+once per tick.
 
 ## Wrapping a command instead of writing a producer
 
@@ -254,6 +263,11 @@ are editable on the **Plugins** page, whose card for this plugin is titled
 **Task progress settings**: saving writes **this entry's own `config`** into the
 profile's `cordis.patch.yml`, and resetting a field removes the override so the
 value falls back to the plugin row's `config` and then to the default below.
+
+Before DSH 0.1.7 those values lived in a settings document keyed by the namespace
+`task-progress`, and DSH renamed that file aside when it moved. The old key is still
+spelled by `SETTINGS_NAMESPACE` in `src/protocol.ts` for exactly that reason — to name
+where a previous version's values went, not as a namespace anything registers.
 
 | Key | Default | Meaning |
 | --- | --- | --- |

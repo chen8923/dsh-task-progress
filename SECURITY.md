@@ -23,7 +23,7 @@ itself a security report.
 | --- | --- |
 | **Files read** | `<root>/.dsh-progress/<session-id>/<task>.jsonl`, tail-only (default 256 KiB per file). `root` is a workspace directory the plugin was handed by a shell call, plus any absolute roots you configured in the settings card. Nothing else is opened. |
 | **Files created** | `<workspace>/.dsh-progress/<session-id>/` (created on a session's first shell call). Editing the settings card writes **this plugin entry's own `config`** through DSH's own settings service — the entry is configured by the `Config` schema this package exports, not by a runtime-registered namespace. No other path is written. |
-| **Shell environment** | Every shell call gets `DSH_PROGRESS_DIR` and `DSH_PROGRESS_CLI` added. |
+| **Shell environment** | Every **model** shell call (one carrying a session) gets `DSH_PROGRESS_DIR` added; `DSH_PROGRESS_CLI` is added whenever the bundled helper ships beside the host bundle. |
 | **Network** | None. No outbound request, no telemetry, no update check, no child process. The browser half fetches one path on the same origin it was served from. |
 | **HTTP surface** | One route: `GET`/`HEAD /plugins/task-progress/state`. It calls `ctx.connection.requestRejection` **before** reading anything, answers for exactly one `?session=` at a time, and puts no filesystem path on the wire. Other methods get `405`. |
 | **Model context** | One **static** system-prompt section, placed beside DSH's background-job guidance. Plus at most **one** appended notice per background job, and only for a job that has run past `remindAfterMs` (default 30 s) with no reported task accounting for it. Nothing else is ever injected, and a notice repeats for no job. The notice names the job and quotes its **label** — for a shell job, the command line the model itself ran — truncated and whitespace-collapsed. Nothing from a progress file is ever quoted into a model step. |
@@ -48,7 +48,7 @@ itself a security report.
   for a job shorter than the configured threshold. (Each notice is a small,
   permanent addition to that session's context, so a runaway one is a real cost.)
 - Anything in the shell-environment or settings contribution that escapes the
-  namespace it declares.
+  entry's own `config`.
 
 ## Out of scope
 

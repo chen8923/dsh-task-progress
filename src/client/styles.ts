@@ -358,12 +358,6 @@ const CSS = `
   text-overflow: ellipsis;
 }
 
-.dtp-jobGap {
-  flex: 1 0 100%;
-  color: var(--dsw-alias-label-tertiary, #8b8b95);
-  font-size: 10px;
-}
-
 .dtp-jobLabel {
   overflow: hidden;
   color: var(--dsw-alias-label-primary, #e8e8ea);

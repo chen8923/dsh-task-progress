@@ -40,8 +40,31 @@ The version here, in `package.json`, and in both READMEs is checked by
   tool owns — is still never touched, and a tail never reaches the Host half or a
   model step.
 
+### Removed
+
+- **`registerProgressSettings`, `SettingsProviderLike` and the host `SettingsScopeLike`
+  are gone, from the sources and from the package's exports.** They described the
+  registration call DSH 0.1.7 replaced with a schema the entry exports itself, and the
+  function would have thrown if anything had called it: `settings.register` is not a
+  method of the new service. Nothing did — its only caller was its own test, whose fake
+  provider supplied the very method that had gone, which is the shape the 0.2.0 notes
+  name as the reason the settings breakage passed every test at the time.
+  `SETTINGS_NAMESPACE` stays, because an older config document was written under that
+  key; `PROTOCOL.md` now says so where a migrating reader would look.
+
 ### Fixed
 
+- **The CLI's readers bound how many files one listing reads, and say so once.** A
+  directory that accumulated years of task files made `list` a one-off cost and `watch`
+  a per-tick one, in the reader whose whole reason to exist is being the cheap path.
+  Both read at most 64 files now, mirroring the Host half's own working-set bound, and
+  mention the rest on stderr; `watch` mentions it on the first look and again only when
+  the count moves, because a note per tick would scroll the terminal at the pace of the
+  clock — the same defect, moved from the filesystem to the output.
+- **A clipped tail line is cut between characters, never inside one.** The clip was a
+  `slice`, which counts UTF-16 code units, so a boundary landing on a surrogate pair cut
+  it in half and the browser drew the replacement glyph where the character was. It
+  counts code points now, and a test pins both the width and the absence of that glyph.
 - **The Plugins page shows one settings card again, and the form it opens actually
   renders.** That page draws the card itself — title, icon, description line and the
   disclosure that opens it — and asks the entry twice by contract: `summary` for the

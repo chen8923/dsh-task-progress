@@ -60,7 +60,7 @@ diff -r ../package/lib lib              # 无输出 = 发布的字节就是这�
 | --- | --- |
 | **DSH** | 构建并实测于 `@deepseek-ai/dsh` 0.1.7-rc.1，Web profile。 |
 | **Node** | 插件本体要求 Node 20+（见 `engines`）；测试套件要求 Node 22.18+（它靠类型擦除直接跑 TypeScript 源码）。 |
-| **用到的 DSH 接缝** | **加载必需**：`webServer`、`connection`、`shellEnv` —— 条目就声明这三个，缺任何一个插件根本不加载。**可选注入**：`jobs`、`systemPrompt`、`configForms`、`slots`、`sidebarRightTabs`、`locale` —— 缺哪个就少那一块界面，其余照常。`ctx.settings` **不使用**：0.1.7 起表单来自本条目自己导出的 `Config`。 |
+| **用到的 DSH 接缝** | **加载必需**：宿主条目声明 `webServer`、`connection`、`shellEnv`，浏览器条目声明 `slots`、`locale`、`sidebarRightTabs` —— 缺其中任何一个，对应的那一半根本不加载：要么整个插件不在，要么它的**整个界面**（悬浮层、右侧栏 tab、设置卡片一起）不在。**可选注入**：宿主侧 `systemPrompt`、`jobs`；浏览器侧 `jobs`、`configForms` —— 缺哪个就少那一块界面，其余照常。`ctx.settings` **不使用**：0.1.7 起表单来自本条目自己导出的 `Config`。 |
 | **依赖** | 运行时零依赖。宿主半只 import Node 内置模块；浏览器半把自己的一切都打包进来，只把 `react` 当平台外部依赖。 |
 | **冲突** | 不占用任何别人拥有的路径：往 `shell.overlay`、右侧栏、设置区各**增加**自己的一个条目（与官方插件同样的追加式注册），外加自己的路由（`/plugins/task-progress/state`）和提示词段。 |
 
@@ -72,8 +72,8 @@ diff -r ../package/lib lib              # 无输出 = 发布的字节就是这�
 | --- | --- |
 | **读取** | `<root>/.dsh-progress/<会话 id>/<任务>.jsonl`，且只读文件尾部（默认每个文件 256 KiB）。`<root>` 是被 shell 调用交到它手上的 workspace 目录，加上你自己配置的绝对路径根。其它文件一概不打开。 |
 | **创建** | `<workspace>/.dsh-progress/<会话 id>/`（该会话第一次 shell 调用时）。设置页的保存经 DSH 自己的设置服务写入**本条目自己的 `config`**（条目由它导出的 `Config` schema 承载，不是运行时注册的命名空间）。 |
-| **Shell 环境** | 每次 shell 调用会多出 `DSH_PROGRESS_DIR` 与 `DSH_PROGRESS_CLI` 两个变量。 |
-| **联网** | 没有。不发任何外部请求，无遥测、无更新检查、不启动子进程。 |
+| **Shell 环境** | 每次**模型** shell 调用（带会话的那种）会多出 `DSH_PROGRESS_DIR`；随包的 CLI 存在于宿主 bundle 旁时，还会多出 `DSH_PROGRESS_CLI`。 |
+| **联网** | 没有。不发任何外部请求，无遥测、无更新检查、不启动子进程。浏览器半只在它自己被送达的同源上取一个路径。 |
 | **HTTP** | 只有一个路由 `GET`/`HEAD /plugins/task-progress/state`，**先**过 DSH 自己的 `connection.requestRejection` 再读任何东西；一次只回答一个会话，响应里不含任何文件系统路径。 |
 | **任务镜像** | 浏览器半画的是 DSH 自己的按会话 job 镜像——就是会话头部那份列表的同源数据：命令行、状态、已运行时长、结束细节。纯客户端读取，没有任何一项经过本插件的路由。 |
 | **模型上下文** | 只加一段**静态**系统提示词（紧挨着 DSH 的后台任务说明）。另外，**每个后台任务最多一条**提醒，且仅当该任务已运行超过阈值（默认 30 秒，配置项 `remindAfterMs`；`0` 关闭）却无人上报时才发。 |
@@ -222,7 +222,7 @@ npm run build         # 需要 tsdown
 
 ```
 src/protocol.ts        共享协议（纯逻辑，打进两个半区）
-src/host/              设置命名空间、store、环境变量贡献者、HTTP 路由、入口
+src/host/              设置 schema、store、环境变量贡献者、HTTP 路由、入口
 src/client/            轮询 store、格式化、设置表单、React 组件、slot、样式
 bin/dsh-progress.mjs   零依赖的生产者 CLI
 docs/PROTOCOL.md       文件协议与全部配置项
@@ -244,9 +244,9 @@ git push && git tag v0.2.1 && git push origin v0.2.1   # 由 CI 发布，并带 
 npm publish                                           # 手工兜底：先构建再发布
 ```
 
-`test/release.test.ts` 会在这些情况失败：`package.json` 的版本没有同时出现在两个 README 与
-CHANGELOG 里；文档里让用户跑的某个示例没被打进 `files`；或者仓库链接与安装说明指向不同项目
-——所以"版本出现的五个地方"不可能各自漂移。
+`test/release.test.ts` 会在这些情况失败：`package.json` 的版本没有同时出现在两个 README、
+CHANGELOG 与 CLI 自己的 `--version` 里；文档里让用户跑的某个示例没被打进 `files`；或者仓库
+链接与安装说明指向不同项目 —— 所以"版本出现的五个地方"不可能各自漂移。
 
 打 tag 后由 `.github/workflows/publish.yml` 发布（需先在 npm 上配置 trusted publisher：
 仓库 `chen8923/dsh-task-progress`、workflow `publish.yml`）。这条路径**不存任何 token**，

@@ -77,7 +77,7 @@ source tree rebuilt locally — can all be done without trusting the maintainer.
 | --- | --- |
 | **DSH** | Built and verified against `@deepseek-ai/dsh` 0.1.7-rc.1, Web profile. |
 | **Node** | The plugin runs on Node 20+ (`engines`). The suite needs Node 22.18+ — it executes the TypeScript sources directly through type stripping. |
-| **DSH seams used** | **Required to load**: `webServer`, `connection`, `shellEnv` — the entry declares these, so a composition missing any of them does not load the plugin at all. **Optional, injected**: `jobs`, `systemPrompt`, `configForms`, `slots`, `sidebarRightTabs`, `locale` — each one missing loses exactly its own surface and nothing else. `ctx.settings` is **not** used: since 0.1.7 the form comes from the `Config` this entry exports. |
+| **DSH seams used** | **Required to load**: the host entry declares `webServer`, `connection`, `shellEnv`, and the browser entry declares `slots`, `locale`, `sidebarRightTabs` — a composition missing any of those does not load that half at all, so either the plugin or its entire UI (overlay, sidebar tab and settings card together) is simply absent. **Optional, injected**: `systemPrompt` and `jobs` on the host, `jobs` and `configForms` in the browser — each one missing loses exactly its own surface and nothing else. `ctx.settings` is **not** used: since 0.1.7 the form comes from the `Config` this entry exports. |
 | **Dependencies** | None at runtime. The host half imports Node built-ins; the browser half ships everything it owns and treats `react` as a platform external. |
 | **Conflicts** | It claims no path another plugin owns. It adds one key to `shell.overlay`, one right-sidebar tab and one settings card — the same additive registration the shipped plugins use — plus its own route (`/plugins/task-progress/state`) and prompt section. |
 
@@ -92,8 +92,8 @@ commits to, and a mismatch between it and the code is itself a security report.
 | --- | --- |
 | **Files read** | `<root>/.dsh-progress/<session-id>/<task>.jsonl`, tail-only (256 KiB per file by default). `<root>` is a workspace directory a shell call handed the plugin, plus any absolute roots you configure. Nothing else is opened. |
 | **Files created** | `<workspace>/.dsh-progress/<session-id>/`, on a session's first shell call. The settings card writes **this entry's own `config`** through DSH's settings service — the entry is configured by the `Config` schema it exports, not by a runtime-registered namespace. |
-| **Shell environment** | Every shell call gains `DSH_PROGRESS_DIR` and `DSH_PROGRESS_CLI`. |
-| **Network** | None. No outbound request, no telemetry, no update check, no child process. |
+| **Shell environment** | Every **model** shell call (one carrying a session) gains `DSH_PROGRESS_DIR`; `DSH_PROGRESS_CLI` is added whenever the bundled helper ships beside the host bundle. |
+| **Network** | None. No outbound request, no telemetry, no update check, no child process. The browser half fetches one path on the same origin it was served from. |
 | **HTTP** | One route, `GET`/`HEAD /plugins/task-progress/state`, fenced by DSH's own `connection.requestRejection` before it reads anything, answering for exactly one session at a time, with no filesystem path in the response. |
 | **Job mirror** | The browser half draws DSH's own per-session job mirror — the same rows the session header lists: command label, state, elapsed time, exit detail. Client-side only; none of it travels over this plugin's route. |
 | **Model context** | One **static** system-prompt section, beside DSH's background-job guidance. At most **one** extra notice per background job, and only for a job that has run past a threshold (default 30 s, `remindAfterMs`) with nothing reported for it; `0` turns it off. |
@@ -331,7 +331,7 @@ Source layout:
 
 ```
 src/protocol.ts        the shared contract (pure, bundled into both halves)
-src/host/              settings namespace, store, shell-environment contributor, HTTP route, prompt section, entry
+src/host/              settings schema, store, shell-environment contributor, HTTP route, prompt section, entry
 src/client/            polling store, formatting, settings form, React components, slots, styles
 bin/dsh-progress.mjs   the dependency-free producer CLI
 docs/PROTOCOL.md       the file contract and every configuration key
@@ -348,12 +348,12 @@ to build needs pnpm's build-script allowlist, whose key contains the exact commi
 — so the install would take two steps and the second one would change on every
 push. Shipping the build makes it one command, at the cost of discipline: after
 any source change, run `npm run build` and commit `lib/` in the same commit.
-`test/bundle.test.ts` fails if the build is missing or is not a loader bundle, and
-CI rebuilds `lib/` and fails if the committed bytes are not what the sources
-produce — that second check is the one a forgotten rebuild trips. `prepublishOnly`
-still builds for `npm publish`. The suites run on Node 22.18+ (they execute the
-TypeScript sources directly through type stripping), while the plugin itself runs on
-Node 20+.
+`test/bundle.test.ts` fails if the build is missing, is not a loader bundle, or no
+longer carries what the sources define, and CI rebuilds `lib/` and fails if the
+committed bytes are not what the sources produce — that second check is the one a
+forgotten rebuild trips. `prepublishOnly` still builds for `npm publish`. The suites
+run on Node 22.18+ (they execute the TypeScript sources directly through type
+stripping), while the plugin itself runs on Node 20+.
 
 **The build toolchain is pinned, and Dependabot is told to leave it alone.** `tsdown`
 is held at an exact version, because a bundler release changes the bytes of the
@@ -384,9 +384,9 @@ npm publish                               # manual fallback: builds first, then 
 ```
 
 `test/release.test.ts` fails if the version in `package.json` is not also stated
-in both READMEs and the changelog, if a documented example is missing from
-`files`, or if the repository links disagree with the install instructions — so
-the five places a version appears cannot drift apart.
+in both READMEs, in the changelog and in the CLI's own `--version` string, if a
+documented example is missing from `files`, or if the repository links disagree
+with the install instructions — so the version cannot drift between those five.
 
 Tagging publishes through `.github/workflows/publish.yml`, once the trusted
 publisher is configured on npm (repository `chen8923/dsh-task-progress`, workflow

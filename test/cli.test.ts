@@ -14,7 +14,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { HELP, formatRow, lineFor, readTail, rowsOf, run, sameRow } from '../bin/dsh-progress.mjs'
+import { HELP, ceilingIsNews, formatRow, lineFor, list, readTail, rowsOf, run, sameRow } from '../bin/dsh-progress.mjs'
 
 test('the CLI module parses and exports its entry point', () => {
   assert.equal(typeof run, 'function')
@@ -88,23 +88,48 @@ test('a task can be followed instead of asked about', () => {
   assert.ok(followed.endsWith(formatRow(row, 5)), 'and the row behind it is the same row')
 })
 
-test('a directory past the file ceiling is read up to it, and says so', () => {
+test('a directory past the file ceiling is read up to it, and says so once', () => {
   // One file is bounded by the tail read; the number of them was not, and `watch`
   // re-reads on a timer — so a directory that accumulated years of task files was a
-  // per-tick cost in the reader that is supposed to be the cheap path. The ceiling
-  // mirrors the Host half's, and the note goes to stderr so the listing on stdout
-  // stays parseable (this test therefore prints one line of it).
+  // per-tick cost in the reader that is supposed to be the cheap path.
   const dir = mkdtempSync(join(tmpdir(), 'dsh-progress-cap-'))
+  const notes: string[] = []
+  const stderr = process.stderr.write
+  const stdout = process.stdout.write
+  process.stderr.write = ((chunk: string) => { notes.push(String(chunk)); return true }) as typeof process.stderr.write
+  process.stdout.write = (() => true) as typeof process.stdout.write
   try {
     for (let index = 0; index < 70; index += 1) {
       const task = `t${String(index).padStart(2, '0')}`
       writeFileSync(join(dir, `${task}.jsonl`), `{"v":1,"task":"${task}","pct":1}\n`, 'utf8')
     }
-    assert.equal(rowsOf({ dir }).rows?.length, 64, 'the ceiling bounds how many files are folded')
+    const read = rowsOf({ dir })
+    assert.equal(read.rows?.length, 64, 'the ceiling bounds how many files are folded')
+    assert.equal(read.beyond, 6, 'and the reader is told how many it did not look at')
+    // The note is the caller's to write, because `watch` is a loop: written here it
+    // would repeat at the pace of the clock for as long as the terminal is open.
+    assert.equal(notes.length, 0, 'rowsOf itself says nothing')
+    list({ dir })
+    assert.equal(notes.length, 1, 'list says it once')
+    assert.match(notes[0] ?? '', /showing 64 of 70 task files/, 'and says what it showed')
+    list({ dir })
+    assert.equal(notes.length, 2, 'a second command is a second reader, so it says so again')
     assert.equal(rowsOf({ dir, task: 't05' }).rows?.length, 1, 'a filter names one file and cannot reach the ceiling')
   } finally {
+    process.stderr.write = stderr
+    process.stdout.write = stdout
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('the ceiling note repeats only when the number moves', () => {
+  // The half of the rule the loop cannot be asked about: `watch` calls `rowsOf` every
+  // tick, and a note per tick is the unbounded read this ceiling removes, moved from
+  // the filesystem to the output.
+  assert.equal(ceilingIsNews(6, undefined), true, 'the first look is news')
+  assert.equal(ceilingIsNews(6, 6), false, 'the look after it is not')
+  assert.equal(ceilingIsNews(7, 6), true, 'a moved count is news again')
+  assert.equal(ceilingIsNews(0, 6), false, 'and nothing to report is silence')
 })
 
 test('a reader takes the tail of a file, because a progress file is a log', () => {

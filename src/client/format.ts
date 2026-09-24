@@ -168,7 +168,7 @@ export function formatPct(pct: number | null): string {
 
 /** How many lines of an observed tail a row shows. */
 export const TAIL_LINES = 3
-/** How wide one of those lines may be before it is clipped. */
+/** How many characters (code points, not UTF-16 units) one of those lines may hold. */
 export const TAIL_LINE_CHARS = 96
 
 /**

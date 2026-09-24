@@ -643,11 +643,9 @@ export function rowsOf(options) {
   }
   // The filter can only ever name one file, so the ceiling is about the unfiltered read.
   const candidates = only === null ? names.sort() : names.filter(name => name === only)
-  if (candidates.length > MAX_TASK_FILES) {
-    process.stderr.write(`dsh-progress: showing ${MAX_TASK_FILES} of ${candidates.length} task files in ${dir}\n`)
-  }
+  const reading = candidates.slice(0, MAX_TASK_FILES)
   const rows = []
-  for (const name of candidates.slice(0, MAX_TASK_FILES)) {
+  for (const name of reading) {
     const event = lastEvent(join(dir, name))
     if (event === null) continue
     rows.push({
@@ -657,7 +655,29 @@ export function rowsOf(options) {
       msg: typeof event.msg === 'string' ? event.msg : '',
     })
   }
-  return { dir, rows }
+  // How many files the ceiling left unread, for the caller to mention. It is *not*
+  // written here: `watch` reads on a timer, so a note per look would scroll the
+  // terminal at the pace of the clock — the same defect as the unbounded read this
+  // ceiling exists to remove, moved from the filesystem to the output.
+  return { dir, rows, beyond: Math.max(0, candidates.length - reading.length) }
+}
+
+/**
+ * Whether a directory holding more task files than one read looks at is news.
+ *
+ * News the first time, and news again only when the number moves: that is what keeps
+ * `watch` from repeating the same sentence every tick.
+ * @param beyond - files the ceiling left unread this look.
+ * @param seen - the same count from the previous look, or undefined for the first.
+ * @returns true when the caller should say so now.
+ */
+export function ceilingIsNews(beyond, seen) {
+  return beyond > 0 && beyond !== seen
+}
+
+/** Say, once, that a directory holds more task files than one read looks at. */
+function notifyCeiling(beyond, dir) {
+  process.stderr.write(`dsh-progress: showing ${MAX_TASK_FILES} of ${MAX_TASK_FILES + beyond} task files in ${dir}\n`)
 }
 
 /** One row as a line of text, aligned to a width the caller already measured. */
@@ -705,9 +725,11 @@ export function sameRow(before, after) {
     && before.msg === after.msg
 }
 
-/** Print every task currently reporting in the directory. */
-function list(options) {
-  const { dir, rows } = rowsOf(options)
+/** Print every task currently reporting in the directory. Exported so the ceiling note
+ * has a caller a test can reach: the loop that watches is not. */
+export function list(options) {
+  const { dir, rows, beyond } = rowsOf(options)
+  if (beyond > 0) notifyCeiling(beyond, dir)
   if (rows === null) {
     process.stdout.write(`(no progress directory at ${dir})\n`)
     return
@@ -737,8 +759,12 @@ const WATCH_MIN_MS = 200
 async function watch(options) {
   const interval = numberFlag(options.interval, 'interval', WATCH_MIN_MS, 60_000) ?? WATCH_EVERY_MS
   let previous = new Map()
+  let seenBeyond
   for (;;) {
-    const { dir, rows } = rowsOf(options)
+    const { dir, rows, beyond } = rowsOf(options)
+    // Said once rather than once per tick: see `ceilingIsNews`.
+    if (ceilingIsNews(beyond, seenBeyond)) notifyCeiling(beyond, dir)
+    seenBeyond = beyond
     if (rows === null) {
       process.stdout.write(`(no progress directory at ${dir})\n`)
       return
