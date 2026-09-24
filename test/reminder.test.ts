@@ -121,7 +121,12 @@ test('the notice forbids the one destructive reading it could invite', () => {
   assert.match(text, /Do not restart a job that is already running/)
   assert.match(text, /progress panel shows nothing/)
   assert.match(text, /\$DSH_PROGRESS_DIR/)
-  assert.match(text, /1 min/, 'the threshold is quoted in minutes')
+  // The threshold is quoted at the resolution it was given. This asked for
+  // `/1 min/` and so pinned the bug rather than catching it: a 30-second bar was
+  // announced as "over 1 min", overstating how long the job had been quiet and
+  // hiding that the deployment had asked for a much shorter one.
+  assert.match(text, /over 30 s/, 'a 30-second threshold is quoted in seconds')
+  assert.doesNotMatch(text, /1 min/, 'and never rounded up into a whole minute')
   assert.match(text, /bash-1 \(python sync_catalog\.py\)/)
 })
 

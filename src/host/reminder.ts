@@ -155,12 +155,28 @@ function describe(job: JobView): string {
  * @param afterMs - the threshold that was crossed, for the wording.
  * @returns the notice text.
  */
+/**
+ * Quote the crossed threshold at the resolution it was given.
+ *
+ * The notice says a job has been quiet "for over <n>", and that number has to be
+ * the bar the deployment actually set: `Math.max(1, Math.round(afterMs / 60_000))`
+ * turned the shipped 30-second default into "over 1 min", which overstates how
+ * long the job has been silent and hides that the user chose a much shorter bar.
+ * A minute or more still reads in minutes.
+ * @param afterMs - the threshold that was crossed, in milliseconds.
+ * @returns the threshold as a short phrase (`30 s`, `1 min`, `10 min`).
+ */
+function formatThreshold(afterMs: number): string {
+  if (afterMs < 60_000) return `${Math.max(1, Math.round(afterMs / 1000))} s`
+  return `${Math.max(1, Math.round(afterMs / 60_000))} min`
+}
+
 export function reminderText(jobs: readonly JobView[], afterMs: number): string {
-  const minutes = Math.max(1, Math.round(afterMs / 60_000))
+  const threshold = formatThreshold(afterMs)
   const named = jobs.slice(0, MAX_LISTED_JOBS).map(describe).join(', ')
   const rest = jobs.length > MAX_LISTED_JOBS ? ` and ${jobs.length - MAX_LISTED_JOBS} more` : ''
   const plural = jobs.length === 1 ? 'job has' : 'jobs have'
-  return `${jobs.length} background ${plural} been running for over ${minutes} min with no progress reported, `
+  return `${jobs.length} background ${plural} been running for over ${threshold} with no progress reported, `
     + `so the user's progress panel shows nothing for ${jobs.length === 1 ? 'it' : 'them'}: ${named}${rest}. `
     + 'If a script is still working, have it append progress events to `$DSH_PROGRESS_DIR/<task>.jsonl` '
     + '(or run `node "$DSH_PROGRESS_CLI" emit --task <id> --pct N --msg "..."`); if it cannot, tell the user '

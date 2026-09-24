@@ -69,6 +69,22 @@ The version here, in `package.json`, and in both READMEs is checked by
   together, with nothing in the plugin's own output to read. Verified against
   cordis's own `resolveConfig`, which now returns the resolved section; a contract
   test pins the face.
+- **An event that omits `state` now means `running`, as the protocol always said.**
+  `PROTOCOL.md`'s field table documents `running` as `state`'s default, but the
+  fold fell back to the previous value instead — so a producer that named a
+  terminal state once and then kept appending messages stayed frozen there. The
+  CLI made this the normal case: `emit` writes no `state` field unless `--state`
+  is passed, so a watcher that had reported `done` and then kept reporting `{pct,
+  msg}` showed a finished row for work that was plainly still running (and the
+  reminder went on nagging about a job the file claimed had finished). Only an
+  explicit `running` restarts a run's counters; an absent state flips the status
+  and leaves the progress alone, because losing progress is the bigger surprise.
+- **The reminder quotes the threshold the deployment actually set.** A 30-second
+  `remindAfterMs` was announced as "over 1 min" — `Math.max(1, Math.round(ms /
+  60_000))` — which overstated how long the job had been quiet and hid that the
+  user had asked for a much shorter bar. Anything under a minute now reads in
+  seconds. The test that asserted `/1 min/` had been pinning the bug, not catching
+  it.
 
 ## [0.2.0] — 2026-09-22
 

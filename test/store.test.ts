@@ -56,6 +56,32 @@ test('remember() refuses a session id that is not a safe path segment', () => {
   }
 })
 
+test('an append that omits state reports running, which is the documented default', () => {
+  const f = fixture()
+  try {
+    // A real clock: `scan()` prunes terminal tasks older than `retainMs` against
+    // the time it is handed, so a 1970 `at` is deleted before the assertion and
+    // the test would pass on `undefined` — which is exactly how the first version
+    // of this test was caught being decorative, by mutation.
+    const now = Date.now()
+    f.write('job', [{ v: 1, task: 'job', state: 'done', msg: 'ok', at: now - 1000 }])
+    // PROTOCOL.md's field table says `state` defaults to `running`. A producer
+    // that appends only a message is therefore still reporting a live run — the
+    // row must not keep claiming the previous run finished. The CLI relies on
+    // this too: `emit` writes no `state` field unless `--state` is passed, so a
+    // watcher that named a terminal state once and then kept emitting stayed
+    // frozen there (measured: the reminder kept nagging about a job the file
+    // said was done).
+    f.append('job', { v: 1, task: 'job', msg: 'one more chunk', at: now })
+    f.store.scan(now)
+    const task = f.store.snapshot(now, f.sessionId).tasks.find(row => row.task === 'job')
+    assert.ok(task !== undefined, 'the task must still be retained at this clock')
+    assert.equal(task.state, 'running', 'an absent state means running, not "unchanged"')
+  } finally {
+    f.cleanup()
+  }
+})
+
 test('the fold keeps the latest value of every field', () => {
   const f = fixture()
   try {

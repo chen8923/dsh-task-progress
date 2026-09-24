@@ -191,7 +191,7 @@ node "$env:DSH_PROGRESS_CLI" run --task <id> -- <你的命令>
 ## 开发
 
 ```bash
-npm test              # 183 个测试，单进程（受限沙箱里也能跑）
+npm test              # 184 个测试，单进程（受限沙箱里也能跑）
 npm run test:runner   # 同一套测试走 node --test
 npm run build         # 需要 tsdown
 ```

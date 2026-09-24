@@ -194,8 +194,18 @@ function fold(
     }
 
     let next: ProgressTask = { ...current, updatedAt: Math.max(current.updatedAt, at) }
-    let state: TaskState = next.state
-    if (event.state !== undefined) state = event.state
+    // PROTOCOL.md's field table documents `running` as `state`'s default, and the
+    // CLI depends on it: `emit` writes no `state` field unless `--state` is given,
+    // so a producer that named a terminal state once and then kept appending
+    // messages was frozen at that terminal state forever — the row said "done"
+    // while the job was plainly still working (measured: the reminder went on
+    // nagging about a job the file claimed had finished).
+    //
+    // An absent state therefore means running, full stop. Only an **explicit**
+    // `running` restarts a run's counters (above): dropping progress is a bigger
+    // surprise than a status flip, so that stays something a producer says on
+    // purpose.
+    const state: TaskState = event.state ?? 'running'
     let pct = next.pct
     if (event.pct !== undefined) pct = event.pct
     else if (event.total !== undefined && event.done !== undefined && event.total > 0) {
