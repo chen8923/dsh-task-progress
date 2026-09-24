@@ -14,7 +14,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { HELP, formatRow, lineFor, rowsOf, run, sameRow } from '../bin/dsh-progress.mjs'
+import { HELP, formatRow, lineFor, readTail, rowsOf, run, sameRow } from '../bin/dsh-progress.mjs'
 
 test('the CLI module parses and exports its entry point', () => {
   assert.equal(typeof run, 'function')
@@ -86,6 +86,25 @@ test('a task can be followed instead of asked about', () => {
   const followed = lineFor(row, 5, true)
   assert.match(followed, /^\d{2}:\d{2}:\d{2} {2}/, 'a follow leads with the clock')
   assert.ok(followed.endsWith(formatRow(row, 5)), 'and the row behind it is the same row')
+})
+
+test('a reader takes the tail of a file, because a progress file is a log', () => {
+  // PROTOCOL.md promises the reader looks at the last 256 KiB and tells a producer to
+  // keep the file small — but it cannot enforce either. `watch` re-reads every tick by
+  // default, so reading the whole file would make one oversized progress file cost a
+  // full read per second, in a CLI that is supposed to be the cheap way in.
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-progress-tail-'))
+  try {
+    const file = join(dir, 'build.jsonl')
+    writeFileSync(file, `${'x'.repeat(4000)}\n{"v":1,"task":"build","pct":42}\n`, 'utf8')
+    const tail = readTail(file, 64)
+    assert.match(tail, /"pct":42/, 'the end of the file is what a reader sees')
+    assert.doesNotMatch(tail, /x/, 'and the head of it is not read at all')
+    // A file that fits under the cap is read whole, and nothing is dropped from it.
+    assert.match(readTail(file, 1_000_000), /^x{4000}\n/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test('the help text leads with the wrapper, because that is the cheap path', () => {

@@ -42,6 +42,14 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ### Fixed
 
+- **The CLI's reader takes the tail of a progress file, like everything else that
+  reads one.** `list` and `watch` read a file whole while the Host half applied the
+  256 KiB ceiling `PROTOCOL.md` documents and both READMEs promise — and `watch`
+  re-reads on a timer, so one oversized progress file cost a full read per second in
+  the script whose whole reason to exist is being the cheap way in. The bound is
+  written again inside `bin/` rather than imported, because `src/` is not in the
+  package's `files`: a `bin/` script that reached into it would break the moment the
+  tarball is what you have.
 - **A task name is recognised as a word, not as any run of characters inside the
   command.** The rule that ties a reported task to the background job running it — one
   function, consulted by the settle, the reported-nothing rows and the reminder — was a

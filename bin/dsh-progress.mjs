@@ -27,7 +27,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, unlinkSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readSync, readdirSync, rmSync, statSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
@@ -517,11 +517,55 @@ export async function runWrapped(options) {
   return outcome.code
 }
 
+/* ------------------------------------------------------------------ *
+ * The reader's own tail read
+ *
+ * This is the same bound the Host half applies (`maxFileBytes`, 256 KiB by default),
+ * written again rather than imported: `src/` is not in the package's `files`, so a
+ * `bin/` script that reached into it would break the moment the tarball is what you
+ * have. It matters more here than it does there, because `watch` re-reads every tick
+ * — the whole-file version of this made one oversized progress file cost a full read
+ * per second.
+ * ------------------------------------------------------------------ */
+
+/** How much of a progress file a reader looks at: the Host half's documented default. */
+const TAIL_BYTES = 256 * 1024
+
+/**
+ * Read at most `maxBytes` from the end of a file, dropping a partial first line.
+ *
+ * A tail read on a file that outgrew the ceiling starts in the middle of a line, and
+ * that fragment is not a JSON object — but it is also not the line a producer wrote,
+ * so it is sliced off rather than handed to the parser. The buffer is zero-filled and
+ * the read count is honoured for the reason the Host half documents: a file truncated
+ * between the `stat` and the read would otherwise yield whatever was in those heap
+ * bytes.
+ * @param path - the file to read.
+ * @param maxBytes - the ceiling; a file at or under it is read whole.
+ * @returns the tail as text, empty when the file is empty.
+ */
+export function readTail(path, maxBytes = TAIL_BYTES) {
+  const size = statSync(path).size
+  if (size === 0) return ''
+  const start = size > maxBytes ? size - maxBytes : 0
+  const length = size - start
+  const buffer = Buffer.alloc(length)
+  const fd = openSync(path, 'r')
+  let read = 0
+  try {
+    read = readSync(fd, buffer, 0, length, start)
+  } finally {
+    closeSync(fd)
+  }
+  const text = buffer.subarray(0, read).toString('utf8')
+  return start === 0 ? text : text.slice(text.indexOf('\n') + 1)
+}
+
 /** The last parseable event in one file. */
 function lastEvent(path) {
   let text
   try {
-    text = readFileSync(path, 'utf8')
+    text = readTail(path)
   } catch {
     return null
   }
