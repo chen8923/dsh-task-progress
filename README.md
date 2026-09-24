@@ -318,7 +318,7 @@ rehydrate a schema envelope at all.
 ## Development
 
 ```bash
-npm test          # 184 tests, one process (works in restricted sandboxes)
+npm test          # 187 tests, one process (works in restricted sandboxes)
 npm run test:runner   # the same suite through node --test
 npm run build         # requires tsdown
 ```

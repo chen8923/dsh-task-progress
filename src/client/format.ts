@@ -165,3 +165,35 @@ export function headlineTask(tasks: readonly ProgressTask[]): ProgressTask | nul
 export function formatPct(pct: number | null): string {
   return pct === null ? '—' : `${Math.round(pct)}%`
 }
+
+/** How many lines of an observed tail a row shows. */
+export const TAIL_LINES = 3
+/** How wide one of those lines may be before it is clipped. */
+export const TAIL_LINE_CHARS = 96
+
+/**
+ * The last few lines of an observed output tail, ready to render.
+ *
+ * The tail is whatever DSH streamed to this browser, so it can be thousands of
+ * lines and any width at all. A row shows the most recent few, each clipped: the
+ * question it answers is "what is this doing right now", not "show me the log" —
+ * and a row that grew to fit a log would push the rest of the panel off screen.
+ *
+ * Trailing blank lines are dropped rather than shown. A tail usually ends with
+ * the newline it was written with, and rendering that as an empty row would make
+ * every quiet job look like it had gone blank.
+ *
+ * @param text - the observed tail, as the stream accumulated it.
+ * @param maxLines - how many lines to keep; the most recent ones.
+ * @param maxChars - the widest a kept line may be before it is clipped.
+ * @returns the lines to render, oldest first; empty when there is nothing to say.
+ */
+export function tailLines(
+  text: string,
+  maxLines: number = TAIL_LINES,
+  maxChars: number = TAIL_LINE_CHARS,
+): readonly string[] {
+  const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+  return lines.slice(-Math.max(1, maxLines)).map(line =>
+    line.length <= maxChars ? line : `${line.slice(0, Math.max(1, maxChars - 1))}…`)
+}

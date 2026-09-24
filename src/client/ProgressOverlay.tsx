@@ -54,7 +54,10 @@ export function ProgressOverlay({ t, useSessions, roster: rosterSlot }: Progress
   const tick = (state?.tasks.length ?? 0) > 0
   const now = useNow(1000, tick)
   const tasks = selectTasks(state, current, now, 'active')
-  const jobs = unreportedJobs(useLiveJobs(useJobRoster(rosterSlot), current), tasks.map(task => task.task))
+  // Held in a binding rather than inlined: the group below needs the same roster
+  // to observe each unreported job's output through.
+  const roster = useJobRoster(rosterSlot)
+  const jobs = unreportedJobs(useLiveJobs(roster, current), tasks.map(task => task.task))
   const policy = overlayPolicy({
     reported: tasks.length,
     unreported: jobs.length,
@@ -92,7 +95,7 @@ export function ProgressOverlay({ t, useSessions, roster: rosterSlot }: Progress
                 </svg>
               </button>
             </header>
-            <JobGroup jobs={jobs} t={t} now={now} />
+            <JobGroup jobs={jobs} t={t} now={now} roster={roster} sessionId={current} />
             {tasks.length > 0
               ? (
                 <ul className="dtp-list">

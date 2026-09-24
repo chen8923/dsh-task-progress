@@ -90,7 +90,7 @@ export function ProgressBody({ t, sessionId, useSessions, roster: rosterSlot }: 
   if (tasks.length === 0) {
     return (
       <div className="dtp-body">
-        <JobGroup jobs={jobs} t={t} now={now} />
+        <JobGroup jobs={jobs} t={t} now={now} roster={roster} sessionId={sessionId} />
         {footer}
       </div>
     )
@@ -104,7 +104,7 @@ export function ProgressBody({ t, sessionId, useSessions, roster: rosterSlot }: 
           {t('tab.counts', { running, finished: tasks.length - running })}
         </span>
       </header>
-      <JobGroup jobs={jobs} t={t} now={now} />
+      <JobGroup jobs={jobs} t={t} now={now} roster={roster} sessionId={sessionId} />
       <ul className="dtp-list">
         {tasks.map(task => (
           <TaskRow key={`${task.sessionId}:${task.task}`} task={task} t={t} now={now} />

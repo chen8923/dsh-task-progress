@@ -122,11 +122,61 @@ export function countRunningJobs(jobs: readonly SessionJobView[] | undefined): n
  * @returns that session's rows, in the roster's order.
  */
 export function jobRowsOf(
-  snapshot: { readonly rows: Readonly<Record<string, readonly SessionJobView[]>> } | undefined,
+  snapshot: JobsSnapshotLike | undefined,
   sessionId: string | undefined,
 ): readonly SessionJobView[] {
   if (snapshot === undefined || sessionId === undefined) return NO_JOBS
   return snapshot.rows[sessionId] ?? NO_JOBS
+}
+
+/**
+ * One job's live output, as DSH's observation stream accumulates it.
+ *
+ * This is the tail DSH already pushes to this browser for a job something asked
+ * to observe — bounded by the render limit, with `gapBefore` saying bytes were
+ * dropped. It is **not** the registry's read cursor: `ctx.jobs.read()` is
+ * single-consumer and belongs to the model's `job_output` tool, and this plugin
+ * still never calls it.
+ */
+export interface ObservedJobView {
+  /** Registry id this tail belongs to. */
+  readonly jobId: string
+  /** Accumulated output tail, bounded to the render limit. */
+  readonly text: string
+  /** True when bytes before {@link text} were dropped (eviction, resume gap, or the render bound). */
+  readonly gapBefore?: boolean
+  /** True while the observation stream is open and the job has not settled. */
+  readonly streaming?: boolean
+  /** Terminal observation failure, when the stream ended abnormally. */
+  readonly error?: string
+}
+
+/** One roster snapshot: visible rows per session, plus the per-job tails being observed. */
+export interface JobsSnapshotLike {
+  /** The jobs each watched session can see, keyed by session id. */
+  readonly rows: Readonly<Record<string, readonly SessionJobView[]>>
+  /** Live observation state keyed by job id; absent on a snapshot taken before any observation. */
+  readonly observed?: Readonly<Record<string, ObservedJobView>>
+}
+
+/**
+ * One job's observed output tail, if this browser is watching that job.
+ *
+ * A job nobody observed has no key at all — the client service streams a tail
+ * only while a surface asks for it (`observe`), and drops it with the last
+ * watcher, so absence is the normal state for a row that has never been looked at
+ * closely.
+ *
+ * @param snapshot - a roster snapshot, or undefined before the service loads.
+ * @param jobId - the job whose tail to read; undefined reads nothing.
+ * @returns the tail, or undefined when that job is not being observed.
+ */
+export function observedTailOf(
+  snapshot: JobsSnapshotLike | undefined,
+  jobId: string | undefined,
+): ObservedJobView | undefined {
+  if (snapshot === undefined || jobId === undefined) return undefined
+  return snapshot.observed?.[jobId]
 }
 
 /**
@@ -137,8 +187,8 @@ export function jobRowsOf(
  * `test/client-contract.test.ts`.
  */
 export interface JobRowsSource {
-  /** Identity-stable current snapshot; `rows` is keyed by session id. */
-  getSnapshot(): { readonly rows: Readonly<Record<string, readonly SessionJobView[]>> }
+  /** Identity-stable current snapshot, holding both the rosters and the observed tails. */
+  getSnapshot(): JobsSnapshotLike
   /** Observe snapshot replacements. */
   subscribe(listener: () => void): () => void
 }
@@ -168,6 +218,19 @@ export interface JobRosterLike {
    * @returns the releaser, which drops this watcher's reference.
    */
   watchRows(sessionId: string): () => void
+  /**
+   * Start observing one job's live output; reference-counted on DSH's side, so two
+   * rows showing the same job share one stream.
+   *
+   * This is the streaming half of the same service whose `state.observed` carries
+   * the tails: a job nobody observes has no tail, and the last watcher's release
+   * drops it. It is not the registry's `read()` cursor — nothing here consumes
+   * what the model would have read.
+   * @param sessionId - the owning session, for the fenced read; undefined for an unowned job.
+   * @param id - the job to observe.
+   * @returns the releaser, which drops this observer's reference.
+   */
+  observe(sessionId: string | undefined, id: string): () => void
 }
 
 /**

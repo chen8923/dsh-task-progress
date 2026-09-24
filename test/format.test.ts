@@ -17,6 +17,7 @@ import {
   isStalled,
   overlayPolicy,
   selectTasks,
+  tailLines,
   unitText,
 } from '../src/client/format.ts'
 
@@ -132,4 +133,25 @@ test('the floating surface only summons itself for work the user asked to watch'
   // Opted in, the same state shows and shows in the attention colour: the row is
   // a job nobody is reporting for, and saying so is the whole reason it is there.
   assert.deepEqual(overlayPolicy({ reported: 0, unreported: 3, allowUnreported: true }), { visible: true, warn: true })
+})
+
+test('an observed output tail is reduced to its last few lines', () => {
+  // The tail is whatever DSH streamed, so it can be thousands of lines and any
+  // width at all. A row shows the most recent few, clipped: the question it
+  // answers is "what is this doing right now", not "show me the log".
+  assert.deepEqual(tailLines('a\nb\nc\nd\ne'), ['c', 'd', 'e'], 'the most recent lines win')
+  assert.deepEqual(tailLines('a\nb\n'), ['a', 'b'], 'a trailing newline is not an empty line')
+  assert.deepEqual(tailLines('a\n\n\n'), ['a'], 'and neither is a run of them')
+  assert.deepEqual(tailLines('  a  \n  b  '), ['a', 'b'], 'each line is trimmed for display')
+  assert.deepEqual(tailLines(''), [], 'nothing to show is nothing')
+  assert.deepEqual(tailLines('   \n  '), [], 'whitespace alone is nothing to show')
+  assert.deepEqual(tailLines('one\ntwo', 1), ['two'], 'the line cap is honoured')
+})
+
+test('a very wide tail line is clipped rather than wrapped', () => {
+  const long = 'x'.repeat(400)
+  const [line] = tailLines(long)
+  assert.ok(line !== undefined)
+  assert.ok(line.length <= 96, 'a row stays one line high')
+  assert.match(line, /…$/, 'and says so when it clipped')
 })

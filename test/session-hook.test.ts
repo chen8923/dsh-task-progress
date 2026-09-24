@@ -14,7 +14,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { countRunningJobs, createRosterSlot, jobRowsOf, mainSessionId } from '../src/client/session-hook.ts'
+import { countRunningJobs, createRosterSlot, jobRowsOf, mainSessionId, observedTailOf } from '../src/client/session-hook.ts'
 
 test('live jobs are running and stopping; everything else is settled', () => {
   assert.equal(countRunningJobs([
@@ -64,6 +64,24 @@ test("one session's rows come out of the client roster snapshot", () => {
   assert.deepEqual(jobRowsOf({ rows }, 'session-b'), [], 'an unwatched session has no key at all')
   assert.deepEqual(jobRowsOf(undefined, 'session-a'), [])
   assert.deepEqual(jobRowsOf({ rows }, undefined), [])
+})
+
+test('an observed job exposes the output tail DSH already streamed to this browser', () => {
+  // DSH's client job service accumulates a bounded output tail per observed job
+  // (`ctx.jobs.observe(sessionId, id)` → `state.observed[id]`). Reading it is how
+  // a row for a job that never reported can say what it is actually doing —
+  // without touching the registry's single-consumer read cursor, which belongs to
+  // the model's `job_output` tool.
+  const observed = {
+    'bash-7': { jobId: 'bash-7', text: 'step 1\nstep 2', streaming: true },
+    'bash-8': { jobId: 'bash-8', text: 'done', gapBefore: true, error: 'stream ended' },
+  }
+  assert.deepEqual(observedTailOf({ rows: {}, observed }, 'bash-7'), observed['bash-7'])
+  assert.deepEqual(observedTailOf({ rows: {}, observed }, 'bash-8'), observed['bash-8'])
+  assert.equal(observedTailOf({ rows: {}, observed }, 'bash-9'), undefined, 'an unobserved job has no tail')
+  assert.equal(observedTailOf({ rows: {} }, 'bash-7'), undefined, 'a snapshot without observations answers nothing')
+  assert.equal(observedTailOf(undefined, 'bash-7'), undefined)
+  assert.equal(observedTailOf({ rows: {}, observed }, undefined), undefined)
 })
 
 test('an absent slice keeps one stable reference, so a selector cannot loop', () => {

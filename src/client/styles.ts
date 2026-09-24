@@ -333,9 +333,35 @@ const CSS = `
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 6px 12px;
   list-style: none;
+}
+
+/* The observed output tail: what the job is printing right now.
+   A full-width basis puts it on its own line under the label and the clock,
+   which is what the wrapped row is for. */
+.dtp-jobTail {
+  flex: 1 0 100%;
+  max-height: 54px;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1, rgba(128, 128, 128, 0.12));
+  color: var(--dsw-alias-label-secondary, #a9a9b3);
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  line-height: 15px;
+  white-space: pre;
+  text-overflow: ellipsis;
+}
+
+.dtp-jobGap {
+  flex: 1 0 100%;
+  color: var(--dsw-alias-label-tertiary, #8b8b95);
+  font-size: 10px;
 }
 
 .dtp-jobLabel {

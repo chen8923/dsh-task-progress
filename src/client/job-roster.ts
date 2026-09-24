@@ -11,8 +11,8 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import {
-  countRunningJobs, jobRowsOf,
-  type JobRosterLike, type RosterSlot, type SessionJobView,
+  countRunningJobs, jobRowsOf, observedTailOf,
+  type JobRosterLike, type ObservedJobView, type RosterSlot, type SessionJobView,
 } from './session-hook.ts'
 
 /**
@@ -88,4 +88,41 @@ export function useLiveJobs(
  */
 export function useLiveJobCount(roster: JobRosterLike | undefined, sessionId: string | undefined): number {
   return countRunningJobs(useLiveJobs(roster, sessionId))
+}
+
+/**
+ * One job's observed output tail, kept streaming while its row is on screen.
+ *
+ * Observing is the same bargain `watchRows` makes: the tail exists only while
+ * somebody asks for it, and DSH drops it with the last watcher — so a row that
+ * wants to show output has to subscribe, and a row that stops rendering releases
+ * it. It reads what DSH already streams to this browser, never the registry's
+ * single-consumer `read()` cursor, which belongs to the model's `job_output`
+ * tool.
+ *
+ * @param roster - the client roster, or undefined while it is absent.
+ * @param sessionId - the owning session, for the fenced read; undefined for an unowned job.
+ * @param jobId - the job whose tail to follow; undefined follows nothing.
+ * @returns the tail, or undefined while it has not arrived.
+ */
+export function useObservedTail(
+  roster: JobRosterLike | undefined,
+  sessionId: string | undefined,
+  jobId: string | undefined,
+): ObservedJobView | undefined {
+  const source = roster?.state
+  const subscribe = useCallback(
+    (listener: () => void) => source === undefined ? NEVER_SUBSCRIBE() : source.subscribe(listener),
+    [source],
+  )
+  const getSnapshot = useCallback(
+    () => observedTailOf(source?.getSnapshot(), jobId),
+    [source, jobId],
+  )
+  const tail = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  useEffect(() => {
+    if (roster === undefined || jobId === undefined) return
+    return roster.observe(sessionId, jobId)
+  }, [roster, sessionId, jobId])
+  return tail
 }

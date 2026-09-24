@@ -9,6 +9,21 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ## [Unreleased]
 
+### Added
+
+- **A job that reports nothing now shows what it is printing.** The row for an
+  unreported background job used to carry its command line, its state, and how
+  long it had been running — enough to know that something was happening, not
+  enough to know what. It now shows the last few lines the job printed, read from
+  the output tail DSH already streams to this browser (`ctx.jobs.observe`),
+  clipped to three lines with the full tail in the row's tooltip. Three things
+  bound it and `SECURITY.md` records all three: the stream is **DSH's own push to
+  this client** rather than a read this plugin opens, DSH bounds the tail and
+  flags dropped bytes, and the row renders a fixed three clipped lines. The
+  registry's single-consumer `read()` cursor — the one the model's `job_output`
+  tool owns — is still never touched, and a tail never reaches the Host half or a
+  model step.
+
 ### Fixed
 
 - **Both features that read the job registry now ask it the way the host answers.**
