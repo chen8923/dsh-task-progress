@@ -97,3 +97,51 @@ test('the job snapshot is read from the service state, not off the service', () 
   )
   assert.match(code(read('src/client/session-hook.ts')), /readonly state: JobRowsSource/, 'the shape says so')
 })
+
+test("the settings card is addressed by this entry's id, which cordis.patch.yml declares", () => {
+  const client = code(read('src/client/index.tsx'))
+  const declared = /const ENTRY_ID = '([^']+)'/u.exec(client)?.[1]
+  assert.ok(declared !== undefined, 'the client names the entry it belongs to')
+  // DSH 0.1.7 keys its settings forms by `entry.options.id`, so the browser half
+  // must ask for that id — the runtime namespace (`SETTINGS_NAMESPACE`) no longer
+  // addresses a form at all. A mismatch is silent: the form stays `loading` and
+  // the card never appears.
+  const patch = read('cordis.patch.yml').replace(/^[^\S\n]*#.*$/gmu, '')
+  assert.match(
+    patch,
+    new RegExp(`id: ${declared}\\b`, 'u'),
+    `cordis.patch.yml must declare this entry as id: ${declared}`,
+  )
+  assert.ok(
+    !client.includes('configForms.get(SETTINGS_NAMESPACE)'),
+    'the form is keyed by entry id, not by the runtime settings namespace',
+  )
+})
+
+test('the host half exports the Config schema the settings page builds its form from', () => {
+  // `SettingsForms.schema()` reads `entry.fiber.runtime.Config` and skips an entry
+  // that has none — the card's absence is the only symptom.
+  assert.match(
+    code(read('src/host/index.ts')),
+    /export const Config = progressSchema\(\)/u,
+    'an entry that exports no Config is skipped by the settings domain',
+  )
+})
+
+test('the Config schema marks its root volatile, or the entry is skipped anyway', () => {
+  // `volatileForm` keeps only the fields under a `meta.volatile` node and returns
+  // undefined when there are none — a schema that serializes perfectly still
+  // produces no card. Both spellings matter: the live node is what `describe()`
+  // checks, and the serialized root is what the browser rebuilds with `new z()`.
+  const settings = code(read('src/host/settings.ts'))
+  assert.match(
+    settings,
+    /Object\.assign\(schema, \{ type: 'object', meta: \{ default: \{\}, volatile: true \}/u,
+    'the live schema root must be volatile',
+  )
+  assert.match(
+    settings,
+    /put\(\{ type: 'object', meta: \{ default: \{\}, volatile: true \}, dict \}\)/u,
+    'the serialized root must carry the flag too',
+  )
+})

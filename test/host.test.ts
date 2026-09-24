@@ -233,14 +233,12 @@ test('the environment contributor hands out a per-session directory', () => {
   }
 })
 
-test('apply() wires the route, the environment, the settings namespace, and the prompt section', () => {
+test('apply() wires the route, the environment, and the prompt section with no settings service', () => {
   const routes: { kind: string, path: string }[] = []
   const disposers: (() => void)[] = []
   let contributors = 0
-  const registered: string[] = []
   const sections: string[] = []
   const listeners: string[] = []
-  let watched = 0
   const context = {
     effect: (callback: () => void | (() => void)) => {
       const dispose = callback()
@@ -262,20 +260,11 @@ test('apply() wires the route, the environment, the settings namespace, and the 
         return () => { contributors -= 1 }
       },
     },
-    settings: {
-      register: (ns: string, schema: { (value: unknown): unknown }) => {
-        registered.push(ns)
-        return {
-          get: () => schema({}),
-          watch: () => {
-            watched += 1
-            return () => { watched -= 1 }
-          },
-          update: async () => {},
-          replace: async () => {},
-        }
-      },
-    },
+    // Deliberately no `settings` service. DSH 0.1.7 replaced it with a
+    // schema-derived form service that has no `register` at all, so the old
+    // `inject(['settings'])` never fires — which is how both the settings card
+    // and the `roots` override went missing while `apply` looked fine. The
+    // configuration now arrives as the plugin row's own `config` argument.
     systemPrompt: {
       section: (section: { name: string }) => {
         sections.push(section.name)
@@ -309,19 +298,16 @@ test('apply() wires the route, the environment, the settings namespace, and the 
   }
   apply(withInject as never, { scanMs: 60_000 })
   assert.deepEqual(routes.map(route => ({ kind: route.kind, path: route.path })), [{ kind: 'exact', path: STATE_ROUTE }])
-  assert.deepEqual(registered, [SETTINGS_NAMESPACE])
   assert.deepEqual(sections, [PROMPT_SECTION_NAME])
-  assert.equal(watched, 1)
   assert.equal(contributors, 1)
   assert.deepEqual(listeners, ['agent/pre-step'], 'the reminder listens to the step it can still influence')
-  // Seven effects: settings changes, environment, route, scan loop, prompt
-  // section, the reminder, and the settle source. Disposing them unregisters
-  // everything. The settle source is wired from `jobs` alone: this fake has no
-  // `agents`, which is exactly the composition the new registry makes possible.
+  // Six effects: environment, route, scan loop, prompt section, the reminder, and
+  // the settle source. Disposing them unregisters everything. The settle source is
+  // wired from `jobs` alone: this fake has no `agents`, which is exactly the
+  // composition the new registry makes possible.
   for (const dispose of disposers) dispose()
   assert.deepEqual(routes, [])
   assert.deepEqual(sections, [])
   assert.equal(contributors, 0)
-  assert.equal(watched, 0)
   assert.deepEqual(listeners, [])
 })

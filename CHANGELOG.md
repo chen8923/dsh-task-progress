@@ -46,6 +46,20 @@ The version here, in `package.json`, and in both READMEs is checked by
   `test/client-contract.test.ts`, which asserts the **names** this plugin writes
   and DSH reads. Every breakage above was a rename that produced no error at all:
   the plugin kept running and simply stopped drawing.
+- **The settings card exists again, and its edits reach the plugin.** DSH 0.1.7
+  replaced `ctx.settings` with a schema-derived **form** service that has no
+  `register` at all, so the Host half's `inject(['settings'])` callback threw on
+  its very first line — measured in DSH's own startup log as
+  `TypeError: settings.register is not a function`. Everything after that line was
+  skipped with it: the namespace was never published (no card, and nothing in the
+  panel to say why) and `store.setRoots` never ran, so a `roots` override silently
+  did nothing either. The plugin now **exports the `Config` schema its entry is
+  configured by** — the settings domain builds the form from
+  `entry.fiber.runtime.Config` and keeps only what sits under a `meta.volatile`
+  node, skipping an entry that has neither — takes its configuration from the
+  plugin row's own `config` argument, and the browser half addresses the form by
+  **entry id** (`dsh-task-progress`, the `id` in `cordis.patch.yml`) rather than by
+  the runtime namespace. A contract test reads both files and fails if they drift.
 
 ## [0.2.0] — 2026-09-22
 

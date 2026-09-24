@@ -34,7 +34,7 @@ import {
   type JobsLike, type PreStepDecisionLike, type PreStepPayload,
 } from './reminder.ts'
 import { registerStateRoute, type ConnectionLike, type WebServerLike } from './routes.ts'
-import { registerProgressSettings, type SettingsProviderLike } from './settings.ts'
+import { progressSchema } from './settings.ts'
 import { registerProgressEnv, type ShellEnvLike } from './shell-env.ts'
 import { createTaskStore, type SessionJobSource, type TaskStore } from './store.ts'
 import { registerProgressPrompt, type SystemPromptLike } from './system-prompt.ts'
@@ -117,6 +117,21 @@ function resolveCliPath(): string | null {
 }
 
 /**
+ * This plugin entry's configuration schema, as DSH's settings domain reads it.
+ *
+ * Not a formality: since DSH 0.1.7 the settings page is assembled from
+ * `entry.fiber.runtime.Config` — an entry that exports none is **skipped**, so
+ * it shows no card and raises nothing. The domain keeps the fields under a
+ * `meta.volatile` node (`volatileForm`), which is why the schema's root carries
+ * that flag, and it names the form after this entry's id (`dsh-task-progress`,
+ * declared in `cordis.patch.yml`).
+ *
+ * The runtime face is unchanged: the same object is still what
+ * `resolveProgressSettings` consults for a section's value.
+ */
+export const Config = progressSchema()
+
+/**
  * Load the plugin.
  * @param ctx - the host context carrying the route table, trust fence, and environment registry.
  * @param rawConfig - this plugin row's configuration, of unknown shape; it becomes the settings base layer.
@@ -160,20 +175,19 @@ export function apply(ctx: TaskProgressHostContext, rawConfig?: unknown): void {
     }
   }, 'task-progress: scan loop')
 
-  // Settings are optional. A composition with no settings provider still gets
-  // the progress environment, the route, and both panels; its plugin row's
-  // `config` is simply the whole configuration, and nothing exposes a page.
-  ctx.inject(['settings'], (withSettings) => {
-    const scope = registerProgressSettings(withSettings.settings, rawConfig)
-    const applySettings = (next: TaskProgressConfig): void => {
-      liveConfig = next
-      store.reconfigure(next)
-      store.setRoots(next.roots)
-      store.scan()
-    }
-    applySettings(scope.get())
-    withSettings.effect(() => scope.watch((next: TaskProgressConfig) => { applySettings(next) }), 'task-progress: settings changes')
-  })
+  // Configuration arrives as this plugin row's own `config` argument, and the
+  // settings page edits it through the entry's `Config` schema (`ctx.configForms`
+  // on the browser half; a live edit re-runs `apply`).
+  //
+  // This used to go through `ctx.settings.register(...)` and then `scope.watch`.
+  // That is gone in DSH 0.1.7: `ctx.settings` is now a schema-derived form
+  // service with no `register` at all, so the call threw `TypeError: settings.register
+  // is not a function` and **every line after it was skipped** — the namespace was
+  // never published (no card, no error in the panel) and `setRoots` never ran, so
+  // a `roots` override silently did nothing either.
+  store.reconfigure(config)
+  store.setRoots(config.roots)
+  store.scan()
 
   // The convention the model needs, for exactly as long as this plugin is
   // loaded. Without it the panels would stay empty for everyone who has not

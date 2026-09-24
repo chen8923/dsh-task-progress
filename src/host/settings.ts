@@ -197,23 +197,31 @@ function envelopeOf(fields: Record<string, SchemaNodeLike>): SchemaEnvelope {
     }
     dict[field] = put({ type: node.type, meta: node.meta ?? {} })
   }
-  const uid = put({ type: 'object', meta: { default: {} }, dict })
+  const uid = put({ type: 'object', meta: { default: {}, volatile: true }, dict })
   return { uid, refs }
 }
 
 /**
  * Build the namespace schema.
  *
- * The returned object is one value serving three readers: the settings service
+ * The returned object is one value serving four readers: the settings service
  * calls it to resolve a section, serializes it with `toJSON()` for the browser
- * descriptor, and walks `type`/`meta`/`dict`/`inner` to redact secrets (this
- * namespace declares none).
+ * descriptor, walks `type`/`meta`/`dict`/`inner` to redact secrets (this
+ * namespace declares none), and — as the plugin's exported `Config` — is what
+ * DSH's settings domain reads to decide whether this entry has an editable form
+ * at all.
+ *
+ * That last reader is why `volatile` is not decoration. Since 0.1.7 the settings
+ * page is built from **each plugin entry's own `Config`** and keeps only the
+ * fields under a `meta.volatile` node (`settings/src/schema.ts:volatileForm`);
+ * an entry with no volatile field is skipped entirely, with no card and no error
+ * — which is exactly how this plugin's card disappeared twice.
  * @returns a callable, serializable, walkable schema node for this namespace.
  */
 export function progressSchema(): SchemaLike<ProgressSettings> {
   const fields = fieldNodes()
   const schema = ((candidate: unknown) => resolveProgressSettings(candidate)) as SchemaLike<ProgressSettings>
-  Object.assign(schema, { type: 'object', meta: { default: {} }, dict: fields })
+  Object.assign(schema, { type: 'object', meta: { default: {}, volatile: true }, dict: fields })
   schema.toJSON = () => envelopeOf(fields)
   return schema
 }

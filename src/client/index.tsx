@@ -42,8 +42,20 @@ injectStyles()
 /** This overlay entry's id inside the frame-wide layer. */
 const OVERLAY_ID = 'task-progress'
 
+/**
+ * This plugin entry's id — the key DSH's settings page addresses this entry by.
+ *
+ * It is **not** the runtime settings namespace (`SETTINGS_NAMESPACE`): since DSH
+ * 0.1.7 the settings domain builds its forms from each **plugin entry** and names
+ * them after `entry.options.id`, so the value here must equal the `id` this
+ * package declares in `cordis.patch.yml`. `test/client-contract.test.ts` reads
+ * both files and fails if they drift, because a mismatch is invisible: the form
+ * simply never resolves and the card never appears.
+ */
+const ENTRY_ID = 'dsh-task-progress'
+
 /** This settings card's id inside the Plugins page's item list. */
-const CARD_ID = 'task-progress'
+const CARD_ID = ENTRY_ID
 
 /** Required services: slots, copy, and the right sidebar's tab registry. */
 export const inject = ['slots', 'locale', 'sidebarRightTabs'] as const
@@ -144,14 +156,17 @@ export function apply(ctx: ClientContextLike): void {
   // page to edit the knobs from.
   ctx.inject(['configForms'], (withForms) => {
     withForms.effect(() => {
+      // Addressed by this entry's id, not by the runtime namespace: the settings
+      // domain keys its forms by plugin entry (`entry.options.id`), and a key it
+      // has no entry for stays `loading` forever — a missing card and nothing else.
       // See decodeSettingsSection: the Host already resolved the section through
-      // the namespace's own schema, so the card takes it as it stands rather than
+      // the entry's own schema, so the card takes it as it stands rather than
       // re-validating a wire envelope this client cannot rehydrate.
       const form: SettingsForm = createSettingsForm(
-        wrapScope(withForms.configForms.get(SETTINGS_NAMESPACE)),
+        wrapScope(withForms.configForms.get(ENTRY_ID)),
         SETTINGS_FIELDS,
       )
-      return withForms.configForms.whileServed([SETTINGS_NAMESPACE], () => withForms.slots.inject('plugins.item', () => withForms.slots.register(
+      return withForms.configForms.whileServed([ENTRY_ID], () => withForms.slots.inject('plugins.item', () => withForms.slots.register(
         // `id` and `label` are the list slot's contract — a fresh id is added
         // beside the shipped entries, and the label is what a reader searches.
         { name: 'plugins.item', id: CARD_ID, order: 60, label: () => t('settings.title'), locale: NS, inject: () => form },
