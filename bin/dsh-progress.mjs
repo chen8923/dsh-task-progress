@@ -108,7 +108,9 @@ Watching a run instead of asking again:
                  to a single task, and "list --task" is the same read without the
                  follow.
   A directory holding more than 64 task files is read up to that many and says so on
-  stderr — the same working-set bound the Host half applies to its own scan.
+  stderr — the same working-set bound the Host half applies to its own scan. A follow
+  says it once, and again only when that count changes, so watching does not scroll at
+  the pace of the clock.
 
 Examples:
   node "$env:DSH_PROGRESS_CLI" emit --task build --pct 10 --msg "linking"

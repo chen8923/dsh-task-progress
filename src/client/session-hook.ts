@@ -143,7 +143,16 @@ export interface ObservedJobView {
   readonly jobId: string
   /** Accumulated output tail, bounded to the render limit. */
   readonly text: string
-  /** True when bytes before {@link text} were dropped (eviction, resume gap, or the render bound). */
+  /**
+   * True when bytes before {@link text} were dropped (eviction, resume gap, or the
+   * render bound).
+   *
+   * **Read, but not rendered.** The row shows the tail as it arrives and says nothing
+   * when DSH flags a gap, so a truncated tail is drawn as if it were the whole of it.
+   * Saying so is a two-line change in `JobList.tsx` plus copy that is not in the
+   * dictionaries yet; until then the honest description of this row is "the last few
+   * lines DSH sent", not "the beginning of the output".
+   */
   readonly gapBefore?: boolean
   /** True while the observation stream is open and the job has not settled. */
   readonly streaming?: boolean

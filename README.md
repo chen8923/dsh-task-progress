@@ -36,8 +36,9 @@ dsh plugin --profile web add github:chen8923/dsh-task-progress
 ```
 
 DSH mounts a profile bundle at startup, so **restart DSH** afterwards. The plugin
-requires the Web profile (`webServer`, `connection`, `shellEnv`, and the right
-sidebar); in a composition without them it stays unloaded and changes nothing.
+requires the Web profile (`webServer`, `connection`, `shellEnv`, plus the browser
+half's `slots`, `locale` and the right sidebar); in a composition without them it
+stays unloaded and changes nothing.
 
 The repository and the npm package share one name, so `dsh plugin add
 dsh-task-progress` cannot resolve to somebody else's package — there is no

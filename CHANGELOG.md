@@ -4,8 +4,8 @@ All notable changes to this plugin are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The version here, in `package.json`, and in both READMEs is checked by
-`test/release.test.ts`, so they cannot drift apart.
+The version here, in `package.json`, in both READMEs and in the CLI's own `--version`
+string is checked by `test/release.test.ts`, so they cannot drift apart.
 
 ## [0.2.1] — 2026-09-24
 

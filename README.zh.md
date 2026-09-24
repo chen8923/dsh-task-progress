@@ -28,7 +28,7 @@ dsh plugin --profile web add github:chen8923/dsh-task-progress
 ./tools/rebuild.ps1 -Profile web -Checkout <DSH checkout 路径>
 ```
 
-DSH 在启动时挂载 profile bundle，所以之后**需要重启 DSH**。本插件依赖 Web profile（`webServer`、`connection`、`shellEnv` 与右侧栏）；缺少这些的组合里它会保持未加载，不产生任何影响。
+DSH 在启动时挂载 profile bundle，所以之后**需要重启 DSH**。本插件依赖 Web profile（`webServer`、`connection`、`shellEnv`，以及浏览器半的 `slots`、`locale` 与右侧栏）；缺少这些的组合里它会保持未加载，不产生任何影响。
 
 仓库名和 npm 包名**完全一致**，所以 `dsh plugin add dsh-task-progress` 不会装成别人的包——这里不存在"发现用仓库名、安装用包名"的错位。
 
