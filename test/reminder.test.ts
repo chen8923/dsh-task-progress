@@ -143,6 +143,22 @@ test('the notice forbids the one destructive reading it could invite', () => {
   assert.match(text, /bash-1 \(python sync_catalog\.py\)/)
 })
 
+test('the notice offers saying so in the conversation as a way to discharge it', () => {
+  // The convention is "report progress", and a job that genuinely cannot report has
+  // no way to satisfy it — a compiled tool with no hook, work already too far along.
+  // The notice names the honest fallback for that case rather than leaving the model
+  // to invent one. This clause is the whole of "acknowledged in the conversation
+  // counts": the plugin cannot observe what the model says to the user, so the policy
+  // is this sentence plus the per-job memory above, which is what stops the reminder
+  // repeating whether the model reports or explains.
+  //
+  // It is red by mutation rather than by having been written first: the sentence
+  // shipped before anything asserted it, so deleting it was invisible.
+  const text = reminderText([job({ label: 'hsdpkg --status' })], 30_000)
+  assert.match(text, /have it append progress events/, 'the preferred path is still reporting')
+  assert.match(text, /if it cannot, tell the user these jobs have no progress detail/, 'and the fallback is saying so')
+})
+
 test('the notice bounds itself: three labels, then a count', () => {
   const many = [1, 2, 3, 4, 5].map(n => job({ id: `bash-${n}`, label: `step ${n}` }))
   const text = reminderText(many, 60_000)
