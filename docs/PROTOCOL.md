@@ -120,9 +120,12 @@ inferred endings and never written by a producer:
   rely on it being the only thing that ends the row.
 - **Name the task after something in the command line.** The reader matches a
   task to the background job running it by looking for the task id inside the
-  job's label, which for a shell job is the command. A task id that appears
-  nowhere in the command is invisible to that match, and its row will keep
-  reporting whatever the file last said.
+  job's label, which for a shell job is the command. The match is a **whole word**:
+  `--task sync-catalog`, `node build.mjs` and `--task=crack.rar` name their tasks,
+  while `rebuild` does not name `build`, `payload` does not name `load`, and
+  `crackXrar` does not name `crack.rar`. A task id that appears nowhere in the
+  command is invisible to that match, and its row will keep reporting whatever the
+  file last said.
 - **One writer per task id.** Two jobs appending to one file is not a task with
   two writers: it is a task whose ending two of them cannot write, and whose
   percentage is whichever one appended last.
@@ -214,9 +217,9 @@ again supersedes the inference on its own.
 The inference is deliberately narrow, because a wrong one would *hide* work the
 user is waiting on — the failure this whole plugin exists to prevent:
 
-1. the job's label must name the task (the same match the unreported-job rows
-   use, which is why a task id worth reporting is one that appears in the command
-   line);
+1. the job's label must name the task — the same whole-word match the
+   unreported-job rows use (*Name the task after something in the command line*),
+   which is why a task id worth reporting is one that appears in the command line;
 2. **no live job may name that task** — a second writer still running means the
    row is not orphaned, whatever an earlier job did;
 3. the job must have started before the task's last event and ended after it, so

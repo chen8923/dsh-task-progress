@@ -86,6 +86,19 @@ test('a job the scripts already report for is left alone', () => {
   )
 })
 
+test('a report whose name is only glued into the label does not cover the job', () => {
+  // Coverage runs through the same rule as the row and the settle. Under a plain
+  // substring match, a task called `com` would cover a `docker compose` job, and the
+  // reminder — the one thing this notice exists to send — would stay silent for work
+  // nobody is reporting for.
+  const now = 100_000
+  const composer = job({ label: 'docker compose up -d', startedAt: 0 })
+  assert.deepEqual(
+    dueForReminder([composer], reporting('com'), now, 30_000, new Set()).map(entry => entry.id),
+    ['bash-1'],
+  )
+})
+
 test('coverage is judged against the job owner the registry reports', () => {
   // The field the registry spells `owner` is the session the reported task
   // belongs to. Read under any other name it is always undefined, the task store

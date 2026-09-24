@@ -42,6 +42,19 @@ The version here, in `package.json`, and in both READMEs is checked by
 
 ### Fixed
 
+- **A task name is recognised as a word, not as any run of characters inside the
+  command.** The rule that ties a reported task to the background job running it — one
+  function, consulted by the settle, the reported-nothing rows and the reminder — was a
+  plain substring search, so a task called `com` matched `docker compose up -d`, `load`
+  matched `payload`, and `test` matched `latest`. A false match is the expensive
+  direction and the quiet one: the job counts as covered, so it neither reminds the
+  model nor appears as a row, and work nobody is reporting for simply disappears. The
+  boundaries are lookarounds rather than `\b` because a task id may end in `.`, `-` or
+  `_`, where `\b` would demand a word character on the far side and never match, and
+  the name is escaped before it becomes a pattern so that `crack.rar` cannot match
+  `crackXrar`. The one assertion that had pinned the old behaviour — `com` inside
+  `compose` is a match — is now the case that must fail, which is the difference
+  between a rule and a recording of one.
 - **Both features that read the job registry now ask it the way the host answers.**
   `ctx.jobs.list(caller)` used to be handed the agent that owns a job; it now
   compares its caller against `job.owner.id`, a session id, so an agent object

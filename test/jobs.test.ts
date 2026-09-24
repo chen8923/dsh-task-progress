@@ -56,7 +56,48 @@ test('a name too short to be evidence is never matched', () => {
   // that reported nothing, which is the failure this plugin exists to fix.
   assert.equal(labelNamesTask('docker compose up -d', 'up'), false)
   assert.equal(labelNamesTask('docker compose up -d', 'co'), false)
-  assert.equal(labelNamesTask('docker compose up -d', 'com'), true)
+})
+
+test('a name glued into a longer word is not a match', () => {
+  // The match used to be a plain substring search, so `com` matched `compose`,
+  // `load` matched `payload`, and `test` matched `latest`. Each of those is a false
+  // positive, and a false positive is the expensive direction: the job counts as
+  // covered, so it neither reminds the model nor appears as a reported-nothing row
+  // — it simply disappears. A false negative costs one grey row or one reminder, so
+  // the doubt resolves against the match. The assertion that used to sit in the test
+  // above (`com` inside `compose` is a match) was pinning the behaviour rather than
+  // a rule, which is why it moved here as the case that must now fail.
+  assert.equal(labelNamesTask('docker compose up -d', 'com'), false)
+  assert.equal(labelNamesTask('node payload.mjs', 'load'), false)
+  assert.equal(labelNamesTask('npm run latest', 'test'), false)
+  assert.equal(labelNamesTask('git commit -m "rebuild the cache"', 'build'), false)
+  // A separator is what makes it a name, so the same word inside a path still counts.
+  assert.equal(labelNamesTask('node build.mjs', 'build'), true)
+  assert.equal(labelNamesTask('python sync_catalog.py --task sync-catalog', 'sync-catalog'), true)
+})
+
+test('a name with a dot in it is not a pattern', () => {
+  // A task id may contain `.`, and an unescaped `.` in a regular expression matches
+  // any character — the same false positive in a different costume. So the name goes
+  // into the pattern escaped. (This one is red by mutation rather than by having been
+  // written before the fix: the escaping landed with the boundaries.)
+  assert.equal(labelNamesTask('run crack.rar now', 'crack.rar'), true)
+  assert.equal(labelNamesTask('run crackXrar now', 'crack.rar'), false)
+})
+
+test('a name only glued into a longer word still leaves the job unreported', () => {
+  // The same rule at the call site where a false match costs something visible: the
+  // row would vanish from the panel and the reminder would go quiet, so a job with
+  // no reporter would read as reported.
+  const composer = job({ id: 'bash-9', label: 'docker compose up -d' })
+  assert.deepEqual(unreportedJobs([composer], ['com']).map(entry => entry.id), ['bash-9'])
+})
+
+test('a glued name is not proof that a writer existed', () => {
+  // And at the settle, where a false match is worse than a missing row: it would
+  // stamp an ending onto work that is still running.
+  const rebuilt = job({ id: 'bash-9', label: 'npm run rebuild', status: 'killed', startedAt: 1_000, finishedAt: 9_000 })
+  assert.equal(settleTask(task({ task: 'build' }), [rebuilt]), null)
 })
 
 test('a missing or empty label matches nothing', () => {

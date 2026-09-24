@@ -188,6 +188,20 @@ export function settleTask(
 }
 
 /**
+ * What makes an occurrence part of a longer word rather than the word itself.
+ *
+ * `_` counts, because it is what most languages glue an identifier with; `-` and `.`
+ * do not, because a command line separates with them (`--task sync-catalog`,
+ * `node build.mjs`) and the name has to be findable there.
+ */
+const GLUING_CHARACTERS = 'A-Za-z0-9_'
+
+/** The task name as something a regular expression matches literally. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&')
+}
+
+/**
  * Whether one reported task name is recognisable inside a job's command label.
  *
  * This is the reconciliation heuristic, and it is deliberately one-directional:
@@ -197,14 +211,23 @@ export function settleTask(
  * reminder or one extra grey row; a false positive would hide a job the user is
  * waiting on, which is the failure this whole plugin exists to fix.
  *
+ * That asymmetry is why the occurrence has to be a **whole word**. A plain
+ * substring search made `com` match `compose`, `load` match `payload` and `test`
+ * match `latest` — each one a job silently counted as covered, and therefore one
+ * that neither reminded the model nor appeared as a reported-nothing row. The
+ * boundaries are lookarounds rather than `\b` because a task id may legitimately
+ * end in `.`, `-` or `_`, where `\b` would demand a word character on the far side
+ * and never match at all.
+ *
  * @param label - the job's label, usually the command line.
  * @param task - a task name some producer reported.
- * @returns true when the label mentions the task.
+ * @returns true when the label names the task.
  */
 export function labelNamesTask(label: string | undefined, task: string): boolean {
   if (typeof label !== 'string' || label.length === 0) return false
   if (task.length < MIN_MATCH_LENGTH) return false
-  return label.toLowerCase().includes(task.toLowerCase())
+  const boundary = new RegExp(`(?<![${GLUING_CHARACTERS}])${escapeRegExp(task)}(?![${GLUING_CHARACTERS}])`, 'i')
+  return boundary.test(label)
 }
 
 /**

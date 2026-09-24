@@ -214,7 +214,10 @@ the script:
 - **Name the task after something in the command line.** The row is matched to
   the job by the same label heuristic the unreported-job rows use, so
   `--task sync-catalog` inside the command line is recognised and a task named
-  `job1` in a command that never says `job1` is not.
+  `job1` in a command that never says `job1` is not. The match is a whole word,
+  which is the safe direction: `rebuild` does not name a task called `build`, so a
+  job like that keeps its row and still reminds the model, where a substring match
+  would have quietly counted it as reported.
 - **One writer per task id**, or one id per stage. Three jobs appending to one
   file is not a task with three writers; it is a task whose ending two of them
   cannot write.
