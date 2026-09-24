@@ -85,6 +85,15 @@ The version here, in `package.json`, and in both READMEs is checked by
   user had asked for a much shorter bar. Anything under a minute now reads in
   seconds. The test that asserted `/1 min/` had been pinning the bug, not catching
   it.
+- **The security and install documentation now describes what the code does.**
+  `SECURITY.md` still said `ctx.jobs.list(agent)` and described the settings card
+  as writing "that namespace's user layer" — both were the pre-0.1.7 shapes
+  (`list(caller)` takes a session id, and an entry is configured by its own
+  `Config` schema rather than a runtime-registered namespace). The README now
+  states plainly **what installing runs** (nothing: the package declares no
+  `install`/`postinstall`/`prepare` script) and **how to verify the published
+  bytes** against this source tree, because "trust the maintainer" was the only
+  option it offered before.
 
 ## [0.2.0] — 2026-09-22
 

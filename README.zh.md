@@ -32,6 +32,28 @@ DSH 在启动时挂载 profile bundle，所以之后**需要重启 DSH**。本�
 
 仓库名和 npm 包名**完全一致**，所以 `dsh plugin add dsh-task-progress` 不会装成别人的包——这里不存在"发现用仓库名、安装用包名"的错位。
 
+### 安装过程实际执行了什么
+
+**什么都不执行。** 本包**没有声明 `install`、`postinstall` 或 `prepare` 脚本**
+（`npm run build` 是开发命令，`prepublishOnly` 只在维护者发布时触发），所以安装它不会在你的机器上运行任何代码。
+此后真正运行的只有 DSH 宿主进程里的 `lib/index.js` 和浏览器里的 `lib/client.js`——
+两者都在包的 `files` 白名单内，仓库里其他文件不会被安装。
+
+### 自己核对发布的字节
+
+你不需要凭信任接受那个 tarball，也不应该需要。构建产物 `lib/` 是**入库**的，所以发布出去的包可以重新构建并逐字节比对：
+
+```bash
+npm pack dsh-task-progress              # 或者：curl -sL <tarball-url> -o p.tgz
+tar -xzf dsh-task-progress-*.tgz
+git clone https://github.com/chen8923/dsh-task-progress
+cd dsh-task-progress && npm ci && npm run build
+diff -r ../package/lib lib              # 无输出 = 发布的字节就是这份源码
+```
+
+`npm view dsh-task-progress dist.integrity` 是 registry 对该 tarball 记录的哈希，
+所以"registry 哈希、tarball 内容、本地重建的源码树"这三者可以互相印证，**全程不需要信任维护者**。
+
 ## 兼容性
 
 | | |

@@ -45,6 +45,32 @@ discovery-name/install-name gap to get wrong here. The git install is also one
 command with nothing to allow: the built plugin is committed, so there is no
 build step for pnpm to gate.
 
+### What installing actually runs
+
+Nothing. The package declares **no `install`, `postinstall` or `prepare`
+script** (`npm run build` is a development command and `prepublishOnly` only
+fires when a maintainer publishes), so installing it executes no code on your
+machine. The only files that run afterwards are `lib/index.js` in the DSH Host
+process and `lib/client.js` in the browser — both are in the package's `files`
+allow-list, and nothing else from this repository is installed.
+
+### Checking the published bytes yourself
+
+You do not have to take the tarball on trust, and you should not need to. The
+built `lib/` is committed, so the published bundle can be rebuilt and compared:
+
+```bash
+npm pack dsh-task-progress              # or: curl -sL <tarball-url> -o p.tgz
+tar -xzf dsh-task-progress-*.tgz
+git clone https://github.com/chen8923/dsh-task-progress
+cd dsh-task-progress && npm ci && npm run build
+diff -r ../package/lib lib              # empty output = published bytes are this source
+```
+
+`npm view dsh-task-progress dist.integrity` is the registry's own hash of that
+tarball, so the three-way comparison — registry hash, tarball contents, and this
+source tree rebuilt locally — can all be done without trusting the maintainer.
+
 ## Compatibility
 
 | | |
